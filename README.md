@@ -23,8 +23,13 @@ Worker 는 `worker/` 에 있고 `cd worker && npx wrangler deploy` 로 올린다
 막으므로 워커로는 못 가져오지만(무신사는 `robots.txt` 로 명시), 내 맥에서 가져오면 평범한
 방문이라 그냥 된다.
 
-로컬 서버를 켜두면 **웹 화면이 자동으로 그쪽을 찾아 쓴다.** 화면 위에 "내 맥 연결됨" 이 뜨고,
-그때부터 무신사 주소도 그대로 들어간다. 안 켜져 있으면 워커로 돌아간다.
+**로컬 서버가 웹 앱(`docs/`)을 그대로 서비스한다.** 켜고 `http://localhost:8787` 로 열면
+같은 화면이 뜨는데, 가져오기를 내 맥이 하므로 무신사 주소도 그대로 들어간다.
+같은 출처라서 브라우저 권한이나 CORS 문제가 없다.
+
+github.io 페이지도 로컬 서버를 찾아보긴 한다(찾으면 "내 맥 연결됨" 배지). 다만 크롬 138+ 는
+https 페이지가 로컬 주소로 요청할 때 **로컬 네트워크 접근 권한**을 묻고, 사파리는 막을 수 있다.
+확실하게 쓰려면 `localhost:8787` 로 여는 쪽이 낫다.
 안내: https://dlthwjd02-domi.github.io/coordi-checker/local.html
 
 1. [폴더 내려받기](https://github.com/dlthwjd02-domi/coordi-checker/archive/refs/heads/main.zip) 후 압축 풀기

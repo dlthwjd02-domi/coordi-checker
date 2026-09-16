@@ -10,8 +10,11 @@
  * 켜져 있으면 자동으로 로컬을 쓴다. */
 const WORKER_RELAY = 'https://coordi-fetch.domii.workers.dev';
 const LOCAL_RELAY = 'http://127.0.0.1:8787/api';
-let relayBase = WORKER_RELAY;
-let localCheck = null;
+// 이 페이지 자체가 내 맥의 서버에서 왔으면 같은 출처의 중계를 바로 쓴다 (권한 문제 없음)
+const SERVED_LOCALLY = typeof location !== 'undefined'
+  && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+let relayBase = SERVED_LOCALLY ? `${location.origin}/api` : WORKER_RELAY;
+let localCheck = SERVED_LOCALLY ? Promise.resolve(true) : null;
 let localError = '';
 
 function checkLocal(){
@@ -29,7 +32,7 @@ function checkLocal(){
   return localCheck;
 }
 
-const usingLocal = () => relayBase === LOCAL_RELAY;
+const usingLocal = () => relayBase !== WORKER_RELAY;
 
 /* ---------------------------------------------------------------- 가져오기 */
 async function relayPage(url){

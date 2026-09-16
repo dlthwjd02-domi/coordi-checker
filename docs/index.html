@@ -1113,12 +1113,10 @@ $('#reset').onclick = () => {
 /* 내 맥의 로컬 서버가 켜져 있으면 그쪽으로 가져온다 (무신사 등 차단 사이트도 주소로 됨) */
 coordi.checkLocal().then(ok => {
   $('#relay-note').innerHTML = ok
-    ? '<span class="badge">내 맥 연결됨</span> 무신사·스마트스토어도 주소로 됩니다 · '
-      + '<a href="local.html" style="color:inherit">이게 뭔가요?</a>'
+    ? '<span class="badge">내 맥 연결됨</span> 무신사·스마트스토어도 주소로 됩니다'
     : '설치 없이 이 화면에서 바로 돌아갑니다. 무신사·스마트스토어는 <b>사진</b> 버튼으로 올리거나, '
-      + '<a href="local.html" style="color:inherit">내 맥에서 돌리면</a> 주소로도 돼요.'
-      + '<span id="dbg" style="display:block;font-size:11px;opacity:.6">'
-      + (coordi.localReason() || '(사유 없음)') + '</span>';
+      + '<a href="local.html" style="color:inherit">내 맥에서 켜고 localhost:8787 로 열면</a> '
+      + '주소로도 돼요.';
 });
 
 renderLooks();

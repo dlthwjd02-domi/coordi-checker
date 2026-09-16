@@ -1126,8 +1126,12 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return self._json(200, {"error": friendly_error(exc)})
             return self.send_error(404)
+        # 웹 앱(docs/)을 그대로 서비스한다. 같은 출처라 브라우저 권한 문제가 없고,
+        # 가져오기는 /api/page·/api/img 를 쓰므로 무신사 같은 곳도 그냥 된다.
         if parsed.path in ("/", "/index.html"):
-            self.path = "/static/index.html"
+            self.path = "/docs/index.html"
+        elif not parsed.path.startswith(("/cache/", "/docs/", "/static/")):
+            self.path = "/docs" + self.path
         return super().do_GET()
 
     def do_POST(self):
