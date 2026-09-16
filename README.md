@@ -63,7 +63,8 @@ pkill -f server.py                # 종료
 | `docs/core.js` | 브라우저용 엔진 — 가져오기·색·패턴·배경 제거 |
 | `docs/local.html` | 내 맥에서 돌리는 방법 안내 |
 | `worker/` | Cloudflare Worker (상품 페이지·이미지 가져오기 중계) |
-| `AUDIT.md` | 전체 점검 기록 |
+| `AUDIT.md` | 전체 점검 기록과 측정 방법 |
+| `RELEASE.md` | 배포 점검 결과와 다음 배포 때 따라갈 순서 |
 | `WEB.md` | 웹 버전 구조와 옮긴 기록 |
 
 ## 쓰는 흐름
