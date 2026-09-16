@@ -388,9 +388,21 @@ function pickImage(metas, html, base){
   return any ? absolute(any[1], base) : null;
 }
 
+// "… - 사이즈 & 후기 | 무신사" 처럼 붙는 사이트 꼬리와 HTML 기호를 정리한다
+function cleanTitle(raw){
+  const box = document.createElement('textarea');
+  box.innerHTML = raw || '';
+  let t = box.value.replace(/\s+/g, ' ').trim();
+  const bar = t.lastIndexOf(' | ');
+  if (bar > 8) t = t.slice(0, bar);                       // 뒤에 붙은 사이트 이름
+  t = t.replace(/\s*[-–]\s*(사이즈[^|]*|리뷰|후기)[^|]*$/, '').trim();
+  return t;
+}
+
 function pickTitle(metas, doc){
-  for (const k of ['og:title', 'twitter:title', 'name']) if (metas[k]) return metas[k];
-  return (doc.title || '').replace(/\s+/g, ' ').trim();
+  for (const k of ['og:title', 'twitter:title', 'name'])
+    if (metas[k]) return cleanTitle(metas[k]);
+  return cleanTitle(doc.title || '');
 }
 
 function pickPrice(metas, html){
@@ -589,7 +601,8 @@ async function getLocalPhoto(file){
 
 // 사이트가 정책으로 자동 수집을 막는 곳들. 왜 안 되는지 정확히 알려준다.
 const POLICY_BLOCKED = [
-  [/(^|\.)musinsa\.com$/i, '무신사는 허용한 검색봇 외에는 자동 수집을 막아 둬서(robots.txt) 주소로는 못 가져와요.'],
+  [/(^|\.)musinsa\.com$/i, '무신사는 허용한 검색봇 외에는 자동 수집을 막아 둬서(robots.txt) 웹에서는 주소로 못 가져와요. '
+    + '상품 사진을 우클릭해 이미지 주소를 붙여넣거나(내 맥에서 돌리면 주소도 됩니다),'],
   [/(^|\.)naver\.com$/i, '네이버 스마트스토어는 자동 수집을 막고 있어서 주소로는 못 가져와요.'],
   [/(^|\.)coupang\.com$/i, '쿠팡은 자동 수집을 막고 있어서 주소로는 못 가져와요.'],
   [/(^|\.)a-bly\.com$/i, '에이블리는 앱에서 화면을 그려서 주소로는 못 가져와요.'],
@@ -600,7 +613,7 @@ function policyNote(url){
   let host;
   try { host = new URL(url).hostname; } catch { return null; }
   const hit = POLICY_BLOCKED.find(([re]) => re.test(host));
-  return hit ? hit[1] + ' 옆의 “사진” 버튼으로 상품 사진을 올려 주세요.' : null;
+  return hit ? hit[1] + ' 옆의 “사진” 버튼으로 상품 사진을 올려 주세요.' : null;   // 문구는 위에서 이어진다
 }
 
 async function getProduct(raw){

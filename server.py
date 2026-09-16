@@ -2,6 +2,7 @@
 """코디 체커 - 상품 URL을 넣으면 이미지/색을 뽑아주는 로컬 서버."""
 import datetime as dt
 import hashlib
+import html as html_mod
 import io
 import json
 import os
@@ -418,12 +419,22 @@ def pick_color_set(items, main, limit=16):
     return out[:limit]
 
 
+def clean_title(raw):
+    """"… - 사이즈 & 후기 | 무신사" 처럼 붙는 사이트 꼬리와 HTML 기호를 정리한다."""
+    text = re.sub(r"\s+", " ", html_mod.unescape(raw or "")).strip()
+    bar = text.rfind(" | ")
+    if bar > 8:
+        text = text[:bar]
+    text = re.sub(r"\s*[-–]\s*(사이즈[^|]*|리뷰|후기)[^|]*$", "", text).strip()
+    return text
+
+
 def pick_title(metas, html):
     for k in ("og:title", "twitter:title", "name"):
         if metas.get(k):
-            return metas[k]
+            return clean_title(metas[k])
     m = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
-    return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+    return clean_title(m.group(1)) if m else ""
 
 
 def pick_price(metas, html):
@@ -632,12 +643,22 @@ def garment_view(candidates, main_url, referer, main_hex):
     return None
 
 
+def clean_title(raw):
+    """"… - 사이즈 & 후기 | 무신사" 처럼 붙는 사이트 꼬리와 HTML 기호를 정리한다."""
+    text = re.sub(r"\s+", " ", html_mod.unescape(raw or "")).strip()
+    bar = text.rfind(" | ")
+    if bar > 8:
+        text = text[:bar]
+    text = re.sub(r"\s*[-–]\s*(사이즈[^|]*|리뷰|후기)[^|]*$", "", text).strip()
+    return text
+
+
 def pick_title(metas, html):
     for k in ("og:title", "twitter:title", "name"):
         if metas.get(k):
-            return metas[k]
+            return clean_title(metas[k])
     m = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
-    return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+    return clean_title(m.group(1)) if m else ""
 
 
 def pick_price(metas, html):
