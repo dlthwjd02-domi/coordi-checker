@@ -20,7 +20,14 @@
   .layout{display:grid;grid-template-columns:400px 1fr;gap:24px;align-items:start}
   @media (max-width:900px){.layout{grid-template-columns:1fr}}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-  .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;font-weight:600}
+  .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 14px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .step{width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;
+    font-style:normal;font-size:11px;display:inline-flex;align-items:center;justify-content:center;
+    letter-spacing:0;flex:0 0 auto}
+  .hero{margin-bottom:16px}
+  .hero-grid{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:26px;align-items:start}
+  @media (max-width:900px){.hero-grid{grid-template-columns:1fr;gap:16px}}
 
   .slot{margin-bottom:14px}
   .slot label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
@@ -41,8 +48,10 @@
 
   /* 코디 보드 */
   .board{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
-  .item{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;position:relative}
-  .item .ph{aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;
+  .side figure{min-width:0}
+  .item{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;
+    position:relative;min-width:0}
+  .item .ph{min-height:132px;display:flex;align-items:center;justify-content:center;
     background:repeating-linear-gradient(45deg,#f2efeb,#f2efeb 8px,#eae6e0 8px,#eae6e0 16px);
     color:var(--muted);font-size:12px;text-align:center;padding:12px}
   .item img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#fff}
@@ -72,6 +81,61 @@
   .cand img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff}
   .cand i{display:block;height:9px}
 
+  .segs{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:14px}
+  .segs button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:12px;padding:7px 14px}
+  .segs button.on{background:var(--ink);color:#fff}
+  .tags{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .tags button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:11px;
+    padding:6px 7px;font-weight:500}
+  .tags button.on{background:var(--ink);color:#fff}
+
+  .side{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .side figure{margin:0;flex:1 1 180px;min-width:150px}
+  .side img{width:100%;max-height:340px;object-fit:contain;background:#fff;
+    border:1px solid var(--line);border-radius:10px;display:block}
+  .side .bar2{display:flex;height:14px;margin-top:6px;border-radius:4px;overflow:hidden}
+  .side .bar2 i{display:block}
+  .side figcaption{font-size:11px;color:var(--muted);margin-top:5px}
+
+  .stage{position:relative;width:300px;height:520px;margin:0 auto;border-radius:12px;
+    overflow:hidden;background:linear-gradient(#efece7,#e5e1db);border:1px solid var(--line)}
+  .win{position:absolute;left:0;right:0;overflow:hidden}
+  .win img{position:absolute;left:50%;top:0;width:100%;
+    transform:translateX(calc(-50% + var(--x))) translateY(var(--y)) scale(var(--s));
+    transform-origin:top center}
+  .win.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+  /* 한 줄에 둘씩 놓으면 "상의 좌우 / 하의 크기" 처럼 섞여서 헷갈린다 */
+  .fitctl{display:grid;grid-template-columns:auto 1fr;gap:9px 12px;
+    align-items:center;margin-top:16px;font-size:12px;color:var(--muted)}
+  .fitctl b{color:var(--ink);font-size:12px}
+  input[type=range]{width:100%;accent-color:#1b1a18}
+
+  /* 손가락으로 누르는 기기는 화면 폭과 별개로 버튼을 키운다 */
+  @media (pointer:coarse){
+    .mini{font-size:11px;padding:8px 10px}
+    .tags button{font-size:11px;padding:9px 8px}
+    input[type=color]{width:36px;height:34px}
+    .item .x{width:32px;height:32px;line-height:32px;font-size:16px}
+    .look button,.look .lx{padding:9px 11px}
+    .segs button{padding:9px 16px}
+  }
+
+  /* 좁은 화면 — 카드가 1열로 떨어지지 않게, 손으로 누를 수 있게 */
+  @media (max-width:560px){
+    .board{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .side figure{flex:1 1 calc(50% - 7px)}
+    .side img{max-height:260px}
+    .item .name{font-size:11px}
+    .item .tools{flex-wrap:wrap;gap:6px}
+    .mini{font-size:11px;padding:7px 9px}
+    .tags button{font-size:11px;padding:9px 8px}
+    input[type=color]{width:34px;height:32px}
+    .item .x{width:30px;height:30px;line-height:30px;font-size:16px}
+    .fc div{font-size:11px}
+    .fc div b{font-size:13px}
+    .picker{grid-template-columns:repeat(auto-fill,minmax(68px,1fr))}
+  }
+
   /* 결과 */
   .verdict{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
   .score{font-size:44px;font-weight:700;letter-spacing:-2px;line-height:1}
@@ -95,9 +159,13 @@
   .hits button:first-child{border-top:none}
   .hits button:hover{background:#f6f4f1;opacity:1}
   .hits button small{color:var(--muted);font-weight:400;margin-left:6px}
-  .clim{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .clim{margin:0}
+  @media (max-width:900px){.clim{padding-top:16px;border-top:1px solid var(--line)}}
   .clim .where{font-size:13px;font-weight:600;margin-bottom:8px}
-  .clim .temps{display:flex;align-items:baseline;gap:10px;margin-bottom:3px}
+  .clim .temps{display:flex;align-items:center;gap:14px;margin-bottom:5px}
+  .wx{display:block;flex:0 0 auto}
+  .wx-big{width:58px;height:58px}
+  .wx-day{width:26px;height:26px;margin:2px auto 0}
   .clim .big{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1}
   .clim .sub{font-size:12px;color:var(--muted)}
   .clim .band{font-size:14px;font-weight:700;margin:12px 0 5px}
@@ -105,9 +173,15 @@
   .clim .advice p{margin:0 0 6px}
   .clim .advice p:last-child{margin:0}
   .fc{display:flex;gap:4px;margin-top:12px}
-  .fc div{flex:1;text-align:center;font-size:10px;color:var(--muted);line-height:1.5}
+  .fc div{flex:1;text-align:center;font-size:11px;color:var(--muted);line-height:1.5}
   .fc div b{display:block;font-size:12px;color:var(--ink)}
+  .fc div{padding:6px 2px;border-radius:8px;background:#fbfaf9;border:1px solid var(--line)}
   .looks{display:flex;flex-wrap:wrap;gap:8px}
+  .look{display:inline-flex}
+  .look button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px;
+    border-radius:8px 0 0 8px;padding:7px 10px}
+  .look .lx{border-left:none;border-radius:0 8px 8px 0;padding:7px 9px;color:var(--muted)}
+  .look .lx:hover{color:var(--bad)}
   .looks button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px}
 </style>
 </head>
@@ -115,28 +189,32 @@
 <div class="wrap">
   <header>
     <h1>코디 체커</h1>
-    <p>상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려주고, 여행지 기온까지 맞춰 봐요.</p>
+    <p>먼저 여행지와 시기를 고르고, 상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려줘요.</p>
   </header>
 
-  <div class="layout">
-    <!-- 입력 -->
-    <div>
-      <div class="card" style="margin-bottom:16px">
-        <h2>상품 URL</h2>
-        <div id="slots"></div>
-      </div>
-
-      <div class="card" style="margin-bottom:16px">
-        <h2>여행지 · 시기</h2>
+  <div class="card hero">
+    <h2><i class="step">1</i> 어디로, 언제 가나요?</h2>
+    <div class="hero-grid">
+      <div>
         <div class="row">
-          <input type="text" id="place-q" placeholder="도시 이름 (예: 밴쿠버, 서울, 다낭)" autocomplete="off">
+          <input type="text" id="place-q" placeholder="나라나 도시 (예: 대한민국 경주, 밴쿠버)" autocomplete="off">
           <button id="place-go">검색</button>
         </div>
         <div class="status" id="place-st"></div>
         <div class="hits" id="hits" hidden></div>
         <div class="chips" id="chips"></div>
         <select id="month" style="margin-top:12px"></select>
-        <div id="climate"></div>
+      </div>
+      <div id="climate"><div class="empty">여행지를 고르면 그 달 기온과 옷차림 조언이 나와요.</div></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 입력 -->
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2><i class="step">2</i> 상품 URL</h2>
+        <div id="slots"></div>
       </div>
 
       <div class="card">
@@ -155,6 +233,14 @@
         <h2>코디 보드</h2>
         <div class="board" id="board"></div>
         <div id="picker"></div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>핏 뷰</h2>
+        <div class="segs" id="fitmode">
+          <button data-mode="side" class="on">나란히</button>
+          <button data-mode="stack">합성</button>
+        </div>
+        <div id="fit"></div>
       </div>
       <div class="card">
         <h2>어울림 진단</h2>
@@ -191,10 +277,32 @@ ROLES.forEach(r => $('#in-'+r.key).addEventListener('keydown', e => {
   if (e.key === 'Enter') load(r.key);
 }));
 
+const CURRENCY = {KRW:'원', USD:'$', EUR:'€', JPY:'¥', CNY:'¥', GBP:'£',
+                  CAD:'C$', AUD:'A$', THB:'฿', VND:'₫', SGD:'S$', HKD:'HK$'};
+
+// 해외 사이트 가격을 원으로 적으면 안 된다. 통화를 모르면 단위를 안 붙인다.
+function priceText(d){
+  const n = Number(String(d.price || '').replace(/[^0-9.]/g, ''));
+  if (!n) return '';
+  const cur = (d.currency || '').toUpperCase();
+  if (cur === 'KRW') return n.toLocaleString() + '원';
+  if (!cur) return n.toLocaleString();
+  const sym = CURRENCY[cur];
+  return sym ? sym + n.toLocaleString() : n.toLocaleString() + ' ' + cur;
+}
+
+// 색상 칩에서 본 줄무늬만 자동으로 찍어준다.
+// 모델컷은 피부·배경·그림자 때문에 줄무늬 신호가 묻혀서 믿을 수 없다.
+function autoTag(pattern){
+  return (pattern && pattern.from === 'chip' && pattern.kind === 'stripe') ? 'stripe' : 'solid';
+}
+
 async function load(key){
   const input = $('#in-'+key), st = $('#st-'+key);
+  const btn = document.querySelector(`[data-load="${key}"]`);
   const url = input.value.trim();
-  if (!url) return;
+  if (!url || (btn && btn.disabled)) return;      // 연타로 두 번 불러오는 것 방지
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
   st.className = 'status'; st.textContent = '불러오는 중…';
   try {
     const res = await fetch('/api/product', {
@@ -204,12 +312,16 @@ async function load(key){
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     data.pick = 0;
+    data.tag = autoTag(data.pattern);
     state[key] = data;
-    st.textContent = data.site + (data.price ? ' · ' + Number(data.price.replace(/[^0-9.]/g,'')).toLocaleString() + '원' : '');
+    const money = priceText(data);
+    st.textContent = data.site + (money ? ' · ' + money : '');
     render();
   } catch (e) {
     st.className = 'status err';
     st.textContent = e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '불러오기'; }
   }
 }
 
@@ -233,6 +345,28 @@ function rgbToHsl(r,g,b){
   return {h, s:s*100, l:l*100};
 }
 const hsl = hex => rgbToHsl(...hexToRgb(hex));
+const PATTERN_LABEL = {solid:'무지', stripe:'줄무늬', pattern:'패턴'};
+const PATTERN_LONG  = {solid:'무지', stripe:'줄무늬', pattern:'패턴·그래픽'};
+
+// 패턴 옷은 대표색 하나로 볼 수 없어서, 비중이 있는 색을 최대 3개까지 쓴다.
+// 패턴 옷이면 모델컷 대신 색상 칩에서 뽑은 색을 쓴다 (피부·배경이 안 섞임).
+function paletteOf(key){
+  const it = state[key];
+  if (!it) return [];
+  if (it.manual) return [it.manual];
+  return it.colors.filter((c,i) => i === 0 || c.ratio >= 0.12).slice(0,3).map(c => c.hex);
+}
+// 받침에 따라 와/과를 고른다
+function wa(word){
+  const ch = word.charCodeAt(word.length - 1);
+  if (ch < 0xAC00 || ch > 0xD7A3) return word + '와';
+  return word + ((ch - 0xAC00) % 28 === 0 ? '와' : '과');
+}
+function rgbDist(a,b){
+  const A = hexToRgb(a), B = hexToRgb(b);
+  return Math.hypot(A[0]-B[0], A[1]-B[1], A[2]-B[2]);
+}
+
 const repColor = key => {
   const it = state[key];
   if (!it) return null;
@@ -244,7 +378,11 @@ function hueGap(a,b){ const d = Math.abs(a-b) % 360; return Math.min(d, 360-d); 
 function colorName(c){
   if (c.l < 14) return '블랙';
   if (c.l > 90) return '화이트';
-  if (c.s < 16) return c.l > 60 ? '라이트 그레이' : '차콜/그레이';
+  if (c.s < 16) {
+    // 데님처럼 채도가 낮아도 파랑기가 뚜렷하면 네이비로 부른다
+    if (c.s >= 8 && c.h >= 195 && c.h <= 265 && c.l < 45) return '네이비';
+    return c.l > 60 ? '라이트 그레이' : '차콜/그레이';
+  }
   const h = c.h, tone = c.l < 35 ? '딥 ' : c.l > 70 ? '라이트 ' : '';
   const names = [[15,'레드'],[45,'오렌지/베이지'],[70,'옐로'],[160,'그린'],[200,'틸'],[255,'블루'],[290,'퍼플'],[335,'핑크'],[360,'레드']];
   return tone + names.find(n => h <= n[0])[1];
@@ -329,6 +467,42 @@ function diagnose(){
     notes.push(['전체 색 수','b', `유채색이 ${chromatic}개로 많아요. 색은 2개까지만 쓰는 게 안전해요.`]);
   }
 
+  // 패턴 보정 — 네 항목 점수는 대표색 기준이라, 패턴 옷은 따로 보정한다
+  const tagT = (state.top && state.top.tag) || 'solid';
+  const tagB = (state.bottom && state.bottom.tag) || 'solid';
+  const patT = tagT !== 'solid', patB = tagB !== 'solid';
+
+  if (patT && patB) {
+    const both = tagT === 'stripe' && tagB === 'stripe';
+    score += both ? -22 : -18;
+    notes.push(['패턴 궁합','b', both
+      ? '위아래 둘 다 줄무늬예요. 줄 간격이 다르면 눈이 어지러워져서 하나는 무지로 가는 게 안전해요.'
+      : '위아래 둘 다 패턴이라 시선이 분산돼요. 한쪽을 무지로 바꾸면 패턴이 살아납니다.']);
+  } else if (patT || patB) {
+    const pk = patT ? 'top' : 'bottom';
+    const sk = patT ? 'bottom' : 'top';
+    const pn = patT ? '상의' : '하의';
+    const sn = patT ? '하의' : '상의';
+    const solid = repColor(sk);
+    const pal = paletteOf(pk);
+    let near = pal[0], best = 1e9;
+    pal.forEach(h => { const d = rgbDist(h, solid); if (d < best) { best = d; near = h; } });
+    if (best <= 60) {
+      score += 7;
+      notes.push(['패턴 궁합','g',
+        `${pn} 패턴 안의 ${wa(colorName(hsl(near)))} ${sn} 색이 이어져요. 패턴 옷은 이렇게 속 색 하나를 받아주는 게 가장 안정적이에요.`]);
+    } else if (isNeutral(hsl(solid))) {
+      score += 4;
+      notes.push(['패턴 궁합','g',
+        `${sn}가 무채색이라 ${pn} 패턴을 그대로 받아줘요. 패턴 옷에 제일 실패 없는 짝이에요.`]);
+    } else {
+      score -= 4;
+      notes.push(['패턴 궁합','w',
+        `${sn} 색이 ${pn} 패턴 안에 없는 색이에요. 패턴 속 ${colorName(hsl(near))}(${near})에 맞추면 더 정리되고, 지금처럼 대비를 주는 것도 선택이에요.`]);
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
+
   const tag = score >= 80 ? ['그냥 입어도 됨','var(--good)']
             : score >= 66 ? ['괜찮음 · 소품으로 정리','var(--good)']
             : score >= 52 ? ['애매함 · 한 가지만 바꾸자','var(--warn)']
@@ -386,7 +560,12 @@ async function searchPlace(){
   try {
     const r = await (await fetch('/api/places?q=' + encodeURIComponent(q))).json();
     if (r.error) throw new Error(r.error);
-    if (!r.results.length) { $('#place-st').textContent = '그런 지역을 못 찾았어요.'; return; }
+    if (!r.results.length) {
+      $('#place-st').textContent = /[가-힣]/.test(q)
+        ? '못 찾았어요. 다른 한글 표기(반프→밴프)나 영어 이름(Banff)으로 해보세요.'
+        : '그런 지역을 못 찾았어요.';
+      return;
+    }
     $('#place-st').textContent = '';
     $('#hits').hidden = false;
     $('#hits').innerHTML = r.results.map((p,i) =>
@@ -428,7 +607,11 @@ async function loadClimate(){
 }
 
 function renderClimate(){
-  if (!clim) { $('#climate').innerHTML = ''; return; }
+  if (!clim) {
+    $('#climate').innerHTML =
+      '<div class="empty">여행지를 고르면 그 달 기온과 옷차림 조언이 나와요.</div>';
+    return;
+  }
   const c = clim;
   const band = BANDS.find(b => c.tmean >= b.min);
   const notes = [band.wear];
@@ -458,15 +641,16 @@ function renderClimate(){
   const fc = c.forecast.length ? `
     <div class="fc">${c.forecast.map(d => `
       <div>${Number(d.date.slice(5,7))}/${Number(d.date.slice(8,10))}
+        ${icon(dayIcon(d), 'wx-day')}
         <b>${Math.round(d.max)}°</b>${Math.round(d.min)}°
-        ${d.rain != null && d.rain >= 40 ? '☂' : ''}
       </div>`).join('')}</div>
-    <div class="sub" style="margin-top:4px">위는 이번 주 실제 예보예요.</div>` : '';
+    <div class="sub" style="margin-top:6px">위는 이번 주 실제 예보예요.</div>` : '';
 
   $('#climate').innerHTML = `
     <div class="clim">
       <div class="where">${c.place.name} <span class="sub">· ${c.place.where || ''} · ${c.month}월</span></div>
       <div class="temps">
+        ${icon(monthIcon(c), 'wx-big')}
         <div class="big">${c.tmean}°</div>
         <div class="sub">낮 ${c.tmax}° / 밤 ${c.tmin}°<br>비 ${c.rain_days}일${c.snow_days ? ` · 눈 ${c.snow_days}일` : ''}</div>
       </div>
@@ -524,12 +708,171 @@ async function swapImage(key, u){
       `/api/image?u=${encodeURIComponent(u)}&r=${encodeURIComponent(it.referer || '')}`)).json();
     if (r.error) throw new Error(r.error);
     Object.assign(it, {image:r.image, colors:r.colors, source:r.source, pick:0});
+    if (r.pattern) { it.pattern = r.pattern; it.tag = autoTag(r.pattern); }
     delete it.manual;
+    delete it.cut; delete it.cutDone;       // 컷아웃 다시 만든다
     st.textContent = '색을 바꿨어요.';
     render();
   } catch (e) {
     st.className = 'status err'; st.textContent = e.message;
   }
+}
+
+/* ---------------------------------------------------------------- 날씨 픽토그램 */
+const CLOUD = '<g fill="#b9c8d6"><circle cx="17" cy="21" r="7"/><circle cx="27" cy="19" r="9.5"/>' +
+  '<circle cx="35" cy="24" r="6"/><rect x="11" y="23" width="28" height="7.5" rx="3.75"/></g>';
+
+const ICONS = {
+  sun: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="24" cy="24" r="9" fill="#f2b234"/>
+    <g stroke="#f2b234" stroke-width="3.4" stroke-linecap="round">
+      <path d="M24 4.5v5M24 38.5v5M4.5 24h5M38.5 24h5M10.2 10.2l3.5 3.5M34.3 34.3l3.5 3.5M37.8 10.2l-3.5 3.5M13.7 34.3l-3.5 3.5"/>
+    </g></svg>`,
+
+  hot: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="24" cy="18" r="8" fill="#f08a2e"/>
+    <g stroke="#f08a2e" stroke-width="3.2" stroke-linecap="round">
+      <path d="M24 3v4M5 18h4M39 18h4M11.5 5.5l2.8 2.8M33.7 8.3l2.8-2.8"/>
+    </g>
+    <g stroke="#e4613c" stroke-width="3" stroke-linecap="round" fill="none">
+      <path d="M9 34c3-3 6 3 9 0s6 3 9 0 6 3 9 0"/>
+      <path d="M9 41c3-3 6 3 9 0s6 3 9 0 6 3 9 0"/>
+    </g></svg>`,
+
+  cloudSun: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="33" cy="15" r="7.5" fill="#f2b234"/>
+    <g stroke="#f2b234" stroke-width="2.8" stroke-linecap="round">
+      <path d="M33 3.5v3.4M43.8 15h3.2M40.9 7.1l-2.3 2.3M40.9 22.9l-2.3-2.3M25.5 15h-3.2"/>
+    </g>
+    <g transform="translate(-2 5)">${CLOUD}</g>
+    </svg>`,
+
+  rain: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    ${CLOUD}
+    <g stroke="#4a90d9" stroke-width="3.4" stroke-linecap="round">
+      <path d="M17 35l-2 7M25 35l-2 7M33 35l-2 7"/>
+    </g></svg>`,
+
+  snow: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    ${CLOUD}
+    <g fill="#79aed8"><circle cx="16" cy="38" r="2.6"/><circle cx="25" cy="41.5" r="2.6"/>
+      <circle cx="34" cy="38" r="2.6"/></g></svg>`,
+
+  cold: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <g stroke="#5b9bd5" stroke-width="3.2" stroke-linecap="round" fill="none">
+      <path d="M24 5v38M7.5 14.5l33 19M40.5 14.5l-33 19"/>
+      <path d="M18 9.5l6 5 6-5M18 38.5l6-5 6 5M9 20.5l.5 7 6.5 1.5M39 20.5l-.5 7-6.5 1.5M9 27.5l-.5-7 6.5-1.5M39 27.5l.5-7-6.5-1.5"/>
+    </g></svg>`,
+};
+// 그 달의 날씨를 한 글자로 요약한 픽토그램
+function monthIcon(c){
+  if (c.snow_days >= 5) return 'snow';
+  if (c.tmean <= -10) return 'cold';
+  if (c.rain_days >= 13) return 'rain';
+  if (c.tmean >= 27) return 'hot';
+  if (c.rain_days >= 8) return 'cloudSun';
+  return 'sun';
+}
+
+function dayIcon(d){
+  if (d.rain != null && d.rain >= 50) return d.max <= 1 ? 'snow' : 'rain';
+  if (d.rain != null && d.rain >= 25) return 'cloudSun';
+  if (d.max != null && d.max >= 28) return 'hot';
+  if (d.max != null && d.max <= -8) return 'cold';
+  return 'sun';
+}
+
+function icon(name, cls){
+  return ICONS[name].replace('class="wx"', `class="wx ${cls}"`);
+}
+
+/* ---------------------------------------------------------------- 핏 뷰 */
+let fitMode = 'side';
+// scale 이 먼저 먹어서 -52% 로는 모델 상체가 보였다. 다리가 보이는 값으로 맞췄다.
+const fitCtl = {top:{s:1.6, y:-14, x:0}, bottom:{s:1.6, y:-88, x:0}};
+
+document.querySelectorAll('#fitmode button').forEach(b => b.onclick = () => {
+  fitMode = b.dataset.mode;
+  document.querySelectorAll('#fitmode button').forEach(x => x.classList.toggle('on', x === b));
+  renderFit();
+});
+
+async function ensureCutouts(){
+  const jobs = ROLES.map(r => r.key).filter(k => state[k] && state[k].source && !state[k].cutDone);
+  if (!jobs.length) return false;
+  await Promise.all(jobs.map(async k => {
+    const it = state[k];
+    it.cutDone = true;                       // 실패해도 다시 시도하지 않는다
+    try {
+      const r = await (await fetch(`/api/cutout?u=${encodeURIComponent(it.source)}` +
+        `&r=${encodeURIComponent(it.referer || '')}`)).json();
+      if (r.image) { it.cut = r.image; it.cutBg = r.removed; }
+    } catch (e) { /* 원본 사진으로 그린다 */ }
+  }));
+  return true;
+}
+
+function renderFit(){
+  const el = $('#fit');
+  const have = ROLES.filter(r => state[r.key]);
+  if (!have.length) {
+    el.innerHTML = '<div class="empty">상품을 넣으면 사진으로 맞춰 볼 수 있어요.</div>';
+    return;
+  }
+
+  if (fitMode === 'side') {
+    el.innerHTML = `<div class="side">${have.map(r => {
+      const it = state[r.key];
+      const bar = it.colors.map(c =>
+        `<i style="background:${c.hex};flex:${Math.max(c.ratio, 0.04)}"></i>`).join('');
+      return `<figure>
+        <img src="${it.image}" alt="${r.name}">
+        <div class="bar2" title="사진에서 뽑은 색 비중">${bar}</div>
+        <figcaption>${r.name} · ${PATTERN_LONG[it.tag || 'solid']}</figcaption>
+      </figure>`;
+    }).join('')}</div>
+    <div class="status" style="margin-top:10px">아래 띠는 사진에서 뽑은 색과 그 비중이에요. 패턴 옷은 색이 여러 칸으로 나옵니다.</div>`;
+    return;
+  }
+
+  const slots = [['top','상의',0,46], ['bottom','하의',46,54]];
+  el.innerHTML = `
+    <div class="stage">
+      ${slots.map(([k,name,top,h]) => {
+        const it = state[k];
+        const box = `top:${top}%;height:${h}%`;
+        if (!it) return `<div class="win empty" style="${box}">${name} 없음</div>`;
+        const c = fitCtl[k];
+        return `<div class="win" data-slot="${k}" style="${box};--s:${c.s};--y:${c.y}%;--x:${c.x}%">
+          <img src="${it.cut || it.image}" alt="${name}">
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="fitctl">
+      ${slots.filter(([k]) => state[k]).map(([k,name]) => {
+        const c = fitCtl[k];
+        return `<b>${name} 크기</b>
+          <input type="range" min="0.8" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
+          <b>${name} 위아래</b>
+          <input type="range" min="-180" max="20" step="1" value="${c.y}" data-fit="${k}:y">
+          <b>${name} 좌우</b>
+          <input type="range" min="-60" max="60" step="1" value="${c.x}" data-fit="${k}:x">`;
+      }).join('')}
+    </div>
+    <div class="status" style="margin-top:10px">배경을 지운 사진을 위아래로 겹쳐 봅니다. 슬라이더로 옷이 보이는 위치를 맞추세요.</div>`;
+
+  // 슬라이더는 다시 그리지 않고 CSS 변수만 바꿔 끊김 없이 움직이게 한다
+  el.querySelectorAll('[data-fit]').forEach(inp => {
+    const [k, prop] = inp.dataset.fit.split(':');
+    inp.oninput = () => {
+      fitCtl[k][prop] = Number(inp.value);
+      const win = el.querySelector(`.win[data-slot="${k}"]`);
+      if (win) win.style.setProperty('--' + prop,
+        prop === 's' ? inp.value : inp.value + '%');
+    };
+  });
+
+  ensureCutouts().then(changed => { if (changed) renderFit(); });
 }
 
 /* ---------------------------------------------------------------- 렌더 */
@@ -548,11 +891,17 @@ function render(){
         <div class="role">${r.name}</div>
         <div class="name">${it.title || it.site}</div>
       </div>
-      <div class="rep">대표색 ${colorName(hsl(repColor(r.key)))}${it.manual ? ' · 직접 지정' : ''}</div>
+      <div class="rep">대표색 ${colorName(hsl(repColor(r.key)))}${
+        it.manual ? ' · 직접 지정' : it.color_from === 'chip' ? ' · 색상 칩 기준' : ''}</div>
       <div class="tools">
         ${n > 1 ? `<button class="ghost mini" data-pick="${r.key}">다른 색 ${n}개</button>` : ''}
         <input type="color" data-manual="${r.key}" value="${repColor(r.key)}" title="색 직접 지정">
         ${it.manual ? `<button class="ghost mini" data-auto="${r.key}">자동</button>` : ''}
+      </div>
+      <div class="tools" style="padding-top:0">
+        <div class="tags">${Object.keys(PATTERN_LABEL).map(t =>
+          `<button data-tag="${r.key}:${t}" class="${(it.tag||'solid')===t?'on':''}">${PATTERN_LABEL[t]}</button>`
+        ).join('')}</div>
       </div>
     </div>`;
   }).join('');
@@ -583,7 +932,13 @@ function render(){
     delete state[b.dataset.auto].manual;
     render();
   });
+  document.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => {
+    const [key, tag] = b.dataset.tag.split(':');
+    state[key].tag = tag;
+    render();
+  });
   renderPicker();
+  renderFit();
 
   const d = diagnose();
   $('#result').innerHTML = !d
@@ -601,29 +956,73 @@ function render(){
 /* ---------------------------------------------------------------- 저장 */
 const KEY = 'coordi-looks';
 const readLooks = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+
+function writeLooks(looks){
+  try {
+    localStorage.setItem(KEY, JSON.stringify(looks));
+    return true;
+  } catch (e) {
+    alert('저장 공간이 부족해요. 저장한 코디를 몇 개 지우고 다시 해보세요.');
+    return false;
+  }
+}
+
 function renderLooks(){
   const looks = readLooks();
   $('#looks').innerHTML = looks.length
-    ? looks.map((l,i) => `<button data-look="${i}">${l.name}</button>`).join('')
+    ? looks.map((l,i) => `<span class="look">
+        <button data-look="${i}">${l.name}</button>
+        <button class="lx" data-delook="${i}" title="이 코디 지우기">×</button>
+      </span>`).join('')
     : '<span class="status">저장한 코디가 없어요.</span>';
+
   document.querySelectorAll('[data-look]').forEach(b => b.onclick = () => {
     const l = readLooks()[b.dataset.look];
+    if (!l) return;
     Object.keys(state).forEach(k => delete state[k]);
     Object.assign(state, l.state);
     ROLES.forEach(r => { $('#in-'+r.key).value = state[r.key]?.url || ''; });
-    render();
+    if (l.place) {                                  // 여행지·월도 같이 되살린다
+      place = l.place;
+      if (l.month) $('#month').value = l.month;
+      document.querySelectorAll('[data-chip]').forEach(c =>
+        c.classList.toggle('on', PLACES[c.dataset.chip].name === place.name));
+      loadClimate();
+    } else {
+      render();
+    }
+  });
+
+  document.querySelectorAll('[data-delook]').forEach(b => b.onclick = () => {
+    const looks = readLooks();
+    looks.splice(Number(b.dataset.delook), 1);
+    writeLooks(looks);
+    renderLooks();
   });
 }
+
 $('#save').onclick = () => {
   if (!state.top || !state.bottom) return alert('상의와 하의를 먼저 넣어 주세요.');
   const looks = readLooks();
-  looks.push({name: '코디 ' + (looks.length + 1), state: JSON.parse(JSON.stringify(state))});
-  try { localStorage.setItem(KEY, JSON.stringify(looks)); } catch {}
-  renderLooks();
+  // all_candidates 는 80장씩이라 그대로 저장하면 브라우저 저장 공간을 금방 먹는다
+  const slim = {};
+  for (const [k, v] of Object.entries(state)) {
+    const copy = {...v};
+    delete copy.all_candidates;
+    delete copy.cut;
+    delete copy.cutDone;
+    slim[k] = copy;
+  }
+  const label = (place ? place.name + ' ' : '') + $('#month').value + '월 코디';
+  looks.push({name: label, state: JSON.parse(JSON.stringify(slim)),
+              place: place, month: Number($('#month').value)});
+  if (writeLooks(looks)) renderLooks();
 };
+
 $('#reset').onclick = () => {
   Object.keys(state).forEach(k => delete state[k]);
   ROLES.forEach(r => { $('#in-'+r.key).value = ''; $('#st-'+r.key).textContent = ''; });
+  picking = null;
   render();
 };
 

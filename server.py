@@ -34,20 +34,149 @@ FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 
 
 # ---------------------------------------------------------------- 지역 / 기후
-def search_places(q):
-    res = requests.get(GEO_API, params={"name": q, "count": 8, "language": "ko"}, timeout=12)
-    res.raise_for_status()
+# 한국 도시는 "경주시", "강릉시" 로 등록돼 있어서 "경주" 로는 안 잡히고 기차역만 나온다.
+KO_SUFFIXES = ["", "시", "군", "구", "특별자치시", "특별자치도"]
+# 지명으로 인정할 종류. AIRP(공항)·RSTN(역) 같은 건 제외한다.
+PLACE_CODES = ("PPL", "ADM", "ISL", "ISLS", "AREA", "RGN")
+# OSM 결과는 인구수가 없어서, 종류별로 대략의 가중치를 줘서 순위를 맞춘다
+OSM_WEIGHT = {"city": 3_000_000, "municipality": 1_000_000, "town": 300_000,
+              "county": 200_000, "state": 150_000, "province": 150_000, "region": 120_000,
+              "island": 80_000, "borough": 80_000, "archipelago": 60_000,
+              "suburb": 50_000, "village": 30_000, "hamlet": 10_000}
+NOMINATIM = "https://nominatim.openstreetmap.org/search"
+OSM_UA = {"User-Agent": "coordi-checker/1.0 (personal outfit planning tool)",
+          "Accept-Language": "ko"}
+
+
+# 한글 지명이 한국어 색인에 없고 로마자로만 있는 경우가 있다 (통영 → Tongyeong).
+CHO = ["g","kk","n","d","tt","r","m","b","pp","s","ss","","j","jj","ch","k","t","p","h"]
+JUNG = ["a","ae","ya","yae","eo","e","yeo","ye","o","wa","wae","oe","yo","u","wo","we",
+        "wi","yu","eu","ui","i"]
+JONG = ["","k","k","k","n","n","n","t","l","k","m","p","l","l","p","l","m","p","p","t",
+        "t","ng","t","t","k","t","p","t"]
+
+
+def romanize(text):
+    """국어의 로마자 표기법(간이). 음운 변화는 반영하지 않는다."""
     out = []
-    for r in res.json().get("results", []):
-        parts = [r.get("country"), r.get("admin1")]
-        out.append({
-            "name": r["name"],
-            "where": " · ".join([p for p in parts if p and p != r["name"]]),
-            "country": r.get("country") or "",
-            "lat": round(r["latitude"], 4),
-            "lon": round(r["longitude"], 4),
-        })
-    return out
+    for ch in text:
+        code = ord(ch) - 0xAC00
+        if 0 <= code < 11172:
+            out.append(CHO[code // 588] + JUNG[(code % 588) // 28] + JONG[code % 28])
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _om_places(name):
+    try:
+        res = requests.get(GEO_API, params={"name": name, "count": 10, "language": "ko"},
+                           headers=HEADERS, timeout=12)
+        res.raise_for_status()
+        return res.json().get("results", []) or []
+    except Exception:
+        return []
+
+
+def _osm_places(query):
+    try:
+        res = requests.get(NOMINATIM, params={
+            "q": query, "format": "jsonv2", "limit": 10,
+            "accept-language": "ko", "addressdetails": 1,
+        }, headers=OSM_UA, timeout=10)
+        res.raise_for_status()
+        return res.json() or []
+    except Exception:
+        return []
+
+
+def search_places(q):
+    q = (q or "").strip()
+    if not q:
+        return []
+
+    # "대한민국, 경주" / "캐나다 밴쿠버" 처럼 나라를 같이 적는 경우
+    parts = [p.strip() for p in re.split(r"[,/·]| {2,}", q) if p.strip()]
+    hint, target = (parts[0], parts[-1]) if len(parts) >= 2 else ("", q)
+
+    found, seen = [], {}
+
+    def add(item):
+        # 좌표가 겹치거나 같은 나라의 같은 이름이면 한 곳으로 본다
+        keys = [(round(item["lat"], 2), round(item["lon"], 2)),
+                (item["name"].lower(), item["country"])]
+        prev = next((seen[k] for k in keys if k in seen), None)
+        if prev:
+            prev["pop"] = max(prev["pop"], item["pop"])       # 더 센 쪽 점수를 따른다
+            if (item["name"].lower() == target.lower()
+                    and prev["name"].lower() != target.lower()):
+                prev["name"] = item["name"]                   # 적은 대로 맞는 이름을 쓴다
+            if not prev["where"]:
+                prev["where"] = item["where"]
+            for k in keys:
+                seen.setdefault(k, prev)
+            return
+        for k in keys:
+            seen[k] = item
+        found.append(item)
+
+    # 접미사를 붙인 질의를 한꺼번에 던진다 (순차로 하면 한 검색에 3초씩 걸린다)
+    hangul = bool(re.search(r"[가-힣]", target))
+    if hangul:
+        roman = romanize(target)
+        queries = [target + sfx for sfx in KO_SUFFIXES] + [roman, roman + "-si"]
+    else:
+        queries = [target]
+    # 두 곳을 한꺼번에 조회한다. Open-Meteo 는 접두어 매칭이라 놓치는 게 많고,
+    # OSM 은 자유 입력에 강한 대신 역·학교 같은 것도 섞여 나온다.
+    with ThreadPoolExecutor(max_workers=len(queries) + 1) as pool:
+        om_jobs = [pool.submit(_om_places, qq) for qq in queries]
+        osm_job = pool.submit(_osm_places, f"{hint}, {target}" if hint else target)
+
+        for job in om_jobs:                      # 한국어 이름이 나오는 쪽을 먼저 담는다
+            for r in job.result():
+                if not (r.get("feature_code") or "").startswith(PLACE_CODES):
+                    continue
+                where = " · ".join(x for x in (r.get("country"), r.get("admin1"))
+                                   if x and x != r["name"])
+                add({"name": r["name"], "where": where, "country": r.get("country") or "",
+                     "lat": round(r["latitude"], 4), "lon": round(r["longitude"], 4),
+                     "pop": r.get("population") or 0})
+
+        for r in osm_job.result():
+            kind = r.get("addresstype") or r.get("type")
+            if kind not in OSM_WEIGHT:
+                continue                         # 역·학교·식당 등은 버린다
+            addr = r.get("address") or {}
+            name = r.get("name") or (r.get("display_name") or "").split(",")[0]
+            region = addr.get("state") or addr.get("province") or addr.get("county") or ""
+            where = " · ".join(x for x in (addr.get("country"), region) if x and x != name)
+            add({"name": name, "where": where, "country": addr.get("country") or "",
+                 "lat": round(float(r["lat"]), 4), "lon": round(float(r["lon"]), 4),
+                 "pop": OSM_WEIGHT[kind]})
+
+    def score(item):
+        s = item["pop"]
+        if hint and hint in (item["country"] + " " + item["where"]):
+            s += 5_000_000                       # 사용자가 적은 나라를 위로
+        lowered = item["name"].lower()
+        if lowered == target.lower() or item["name"].startswith(target):
+            s += 100_000                         # 적은 이름과 그대로 맞는 것
+        if hangul and lowered == romanize(target).lower():
+            s += 100_000                         # 로마자로 찾은 같은 이름
+        return -s
+
+    found.sort(key=score)
+    # 로마자로 찾았으면 사용자가 적은 한글로 보여준다 (Tongyeong → 통영)
+    if hangul:
+        roman_low = romanize(target).lower()
+        for item in found:
+            if item["name"].lower() == roman_low:
+                item["name"] = target
+    for item in found:
+        item.pop("pop", None)
+        item.pop("src", None)
+    return found[:8]
 
 
 def climate(lat, lon, month):
@@ -156,7 +285,8 @@ TRACKER_RE = re.compile(
     r'/tr\?|/collect|/pixel|/log\?|analytics)', re.I)
 GALLERY_HINT = re.compile(
     r'(xzoom|gallery|상품\s*이미지|product.?imag|goods.?imag|prd.?img|detail.?imag)', re.I)
-COLOR_HINT = re.compile(r'(chip|color|colour|option|swatch|_sub|/sub/)', re.I)
+COLOR_HINT = re.compile(r'(chip|color|colour|option|swatch)', re.I)
+CHIP_RE = re.compile(r'(chip|swatch)', re.I)
 
 
 def collect_images(html, base):
@@ -302,6 +432,15 @@ def pick_price(metas, html):
     return raw if raw and float(raw or 0) > 0 else ""
 
 
+def pick_currency(metas, html):
+    """해외 사이트 가격을 원화로 잘못 적지 않으려면 통화를 같이 봐야 한다."""
+    for k in ("product:price:currency", "og:price:currency", "pricecurrency"):
+        if metas.get(k):
+            return metas[k].strip().upper()[:3]
+    m = re.search(r'"priceCurrency"\s*:\s*"([A-Za-z]{3})"', html)
+    return m.group(1).upper() if m else ""
+
+
 def decode(res):
     """서버가 charset을 안 주면 requests가 latin-1로 잘못 읽어서 한글이 깨진다."""
     charset = None
@@ -319,17 +458,23 @@ def decode(res):
 
 
 # ---------------------------------------------------------------- 색 추출
-def dominant_colors(raw, n=5):
+def open_rgb(raw):
     img = Image.open(io.BytesIO(raw))
     if img.mode in ("RGBA", "LA", "P"):
         img = img.convert("RGBA")
         bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
         img = Image.alpha_composite(bg, img)
-    img = img.convert("RGB")
+    return img.convert("RGB")
 
+
+def crop_center(img):
+    """배경·워터마크를 피하려고 가운데 위주로 자른다."""
     w, h = img.size
-    # 배경·워터마크를 피하려고 가운데 위주로 자른다
-    img = img.crop((int(w * 0.18), int(h * 0.12), int(w * 0.82), int(h * 0.92)))
+    return img.crop((int(w * 0.18), int(h * 0.12), int(w * 0.82), int(h * 0.92)))
+
+
+def dominant_colors(raw, n=5):
+    img = crop_center(open_rgb(raw))
     img.thumbnail((140, 140))
     px = list(img.getdata())
 
@@ -406,6 +551,327 @@ def annotate_colors(urls, referer, gap=14):
     return kept
 
 
+# ---------------------------------------------------------------- 패턴 판별
+def analyze_pattern(raw):
+    """무지 / 스트라이프 / 그래픽 / 올오버 패턴을 구분한다.
+
+    스트라이프는 한 축으로는 밝기가 크게 오르내리는데 그 축과 직각인 줄 안에서는
+    밝기가 거의 일정하다는 성질을 쓴다. 프린트는 상위 색 비중이 낮은 걸로 잡는다.
+    """
+    img = crop_center(open_rgb(raw))
+    gray = img.convert("L").resize((96, 96))
+    px = list(gray.getdata())
+    rows = [px[i * 96:(i + 1) * 96] for i in range(96)]
+    cols = [[rows[r][c] for r in range(96)] for c in range(96)]
+
+    def line_ratio(lines):
+        means = [statistics.mean(l) for l in lines]
+        within = statistics.mean(statistics.pvariance(l) for l in lines)
+        return statistics.pvariance(means) / (within + 1)
+
+    ratio_h = line_ratio(rows)          # 가로줄무늬
+    ratio_v = line_ratio(cols)          # 세로줄무늬
+
+    quant = img.resize((96, 96)).quantize(colors=6, method=Image.Quantize.MEDIANCUT)
+    counts = sorted((c for c, _ in (quant.getcolors() or [(1, 0)])), reverse=True)
+    total = sum(counts) or 1
+    top1 = counts[0] / total
+    big = sum(1 for c in counts if c / total >= 0.12)
+
+    stripe = max(ratio_h, ratio_v)
+    axis = "h" if ratio_h >= ratio_v else "v"
+    return {"kind": "stripe" if stripe >= 3 else "solid",
+            "axis": axis if stripe >= 3 else None,
+            "top1": round(top1, 2), "colors": big, "stripe": round(stripe, 2)}
+
+
+def code_tokens(u):
+    """파일명의 숫자 토큰. 유니클로 krgoods_69_482279 와 goods_69_482279_chip 처럼
+    같은 컬러웨이는 같은 코드를 공유한다."""
+    return set(re.findall(r"\d{2,}", os.path.basename(urlparse(u).path)))
+
+
+def garment_view(candidates, main_url, referer, main_hex):
+    """색상 칩이 있으면 그것으로 옷의 실제 색과 패턴을 본다.
+    모델컷은 피부·배경·그림자가 섞여서 대표색이 배경으로 잡히고 줄무늬도 묻힌다."""
+    chips = [c for c in candidates if CHIP_RE.search(urlparse(c["url"]).path)]
+    if not chips:
+        return None
+
+    want = code_tokens(main_url or "")
+    base = tuple(int(main_hex[i:i + 2], 16) for i in (1, 3, 5)) if main_hex else None
+
+    def rank(c):
+        shared = len(want & code_tokens(c["url"]))
+        gap = 0
+        if base:
+            rgb = tuple(int(c["hex"][i:i + 2], 16) for i in (1, 3, 5))
+            gap = sum((a - b) ** 2 for a, b in zip(rgb, base))
+        return (-shared, gap)          # 컬러웨이 코드가 먼저, 그다음 색 거리
+
+    for chip in sorted(chips, key=rank):
+        try:
+            raw = grab(chip["url"], referer)
+            found = analyze_pattern(raw)
+            found["from"] = "chip"
+            return {"pattern": found, "colors": dominant_colors(raw), "chip": chip["url"]}
+        except Exception:
+            continue
+    return None
+
+
+def pick_title(metas, html):
+    for k in ("og:title", "twitter:title", "name"):
+        if metas.get(k):
+            return metas[k]
+    m = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
+    return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+
+
+def pick_price(metas, html):
+    raw = ""
+    for k in ("product:price:amount", "og:price:amount", "price"):
+        if metas.get(k):
+            raw = metas[k]
+            break
+    if not raw:
+        m = re.search(r'"price"\s*:\s*"?([0-9][0-9,.]*)"?', html)
+        raw = m.group(1) if m else ""
+    raw = re.sub(r"[^0-9.]", "", raw).rstrip(".")
+    return raw if raw and float(raw or 0) > 0 else ""
+
+
+def pick_currency(metas, html):
+    """해외 사이트 가격을 원화로 잘못 적지 않으려면 통화를 같이 봐야 한다."""
+    for k in ("product:price:currency", "og:price:currency", "pricecurrency"):
+        if metas.get(k):
+            return metas[k].strip().upper()[:3]
+    m = re.search(r'"priceCurrency"\s*:\s*"([A-Za-z]{3})"', html)
+    return m.group(1).upper() if m else ""
+
+
+def decode(res):
+    """서버가 charset을 안 주면 requests가 latin-1로 잘못 읽어서 한글이 깨진다."""
+    charset = None
+    m = re.search(r"charset=([\w-]+)", res.headers.get("Content-Type", ""), re.I)
+    if m:
+        charset = m.group(1)
+    if not charset:
+        m = re.search(rb"charset=[\"\']?([\w-]+)", res.content[:4096], re.I)
+        if m:
+            charset = m.group(1).decode("ascii", "ignore")
+    try:
+        return res.content.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        return res.content.decode("utf-8", errors="replace")
+
+
+# ---------------------------------------------------------------- 색 추출
+def open_rgb(raw):
+    img = Image.open(io.BytesIO(raw))
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+        img = Image.alpha_composite(bg, img)
+    return img.convert("RGB")
+
+
+def crop_center(img):
+    """배경·워터마크를 피하려고 가운데 위주로 자른다."""
+    w, h = img.size
+    return img.crop((int(w * 0.18), int(h * 0.12), int(w * 0.82), int(h * 0.92)))
+
+
+def dominant_colors(raw, n=5):
+    img = crop_center(open_rgb(raw))
+    img.thumbnail((140, 140))
+    px = list(img.getdata())
+
+    def is_bg(p):
+        r, g, b = p
+        if r > 238 and g > 238 and b > 238:      # 스튜디오 흰 배경
+            return True
+        if max(p) - min(p) < 10 and r > 225:      # 밝은 회색 배경
+            return True
+        return False
+
+    kept = [p for p in px if not is_bg(p)]
+    if len(kept) < 40:
+        kept = px
+
+    strip = Image.new("RGB", (len(kept), 1))
+    strip.putdata(kept)
+    q = strip.quantize(colors=max(n, 4), method=Image.Quantize.MEDIANCUT)
+    pal = q.getpalette() or []
+    counts = sorted(q.getcolors() or [], reverse=True)
+
+    total = sum(c for c, _ in counts) or 1
+    out = []
+    for cnt, idx in counts[:n]:
+        r, g, b = pal[idx * 3: idx * 3 + 3]
+        out.append({"hex": "#%02x%02x%02x" % (r, g, b), "ratio": round(cnt / total, 3)})
+    return out
+
+
+# ---------------------------------------------------------------- 이미지 캐시
+def grab(url, referer=None):
+    headers = dict(HEADERS)
+    if referer:
+        headers["Referer"] = referer
+    r = requests.get(url, headers=headers, timeout=15)
+    r.raise_for_status()
+    return r.content
+
+
+def store(raw, url, maxpx=900, prefix=""):
+    name = prefix + hashlib.sha1((url + str(maxpx)).encode()).hexdigest()[:16] + ".png"
+    path = os.path.join(CACHE, name)
+    if not os.path.exists(path):
+        im = Image.open(io.BytesIO(raw))
+        if im.mode not in ("RGB", "RGBA"):
+            im = im.convert("RGB")
+        im.thumbnail((maxpx, maxpx))
+        im.save(path, "PNG")
+    return name, path
+
+
+def annotate_colors(urls, referer, gap=14):
+    """후보마다 대표색을 뽑고, 색이 거의 같은 것(같은 색 다른 각도)은 한 장만 남긴다."""
+    def one(u):
+        try:
+            raw = grab(u, referer)
+            store(raw, u, maxpx=260, prefix="t_")      # 썸네일 미리 캐시
+            return {"url": u, "hex": dominant_colors(raw)[0]["hex"]}
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        got = [r for r in pool.map(one, urls) if r]
+
+    kept, rgbs = [], []
+    for item in got:
+        h = item["hex"]
+        rgb = (int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16))
+        near = any(sum((a - b) ** 2 for a, b in zip(rgb, prev)) ** 0.5 <= gap for prev in rgbs)
+        if near:
+            continue
+        kept.append(item)
+        rgbs.append(rgb)
+    return kept
+
+
+# ---------------------------------------------------------------- 패턴 판별
+def analyze_pattern(raw):
+    """무지 / 스트라이프 / 그래픽 / 올오버 패턴을 구분한다.
+
+    스트라이프는 한 축으로는 밝기가 크게 오르내리는데 그 축과 직각인 줄 안에서는
+    밝기가 거의 일정하다는 성질을 쓴다. 프린트는 상위 색 비중이 낮은 걸로 잡는다.
+    """
+    img = crop_center(open_rgb(raw))
+    gray = img.convert("L").resize((96, 96))
+    px = list(gray.getdata())
+    rows = [px[i * 96:(i + 1) * 96] for i in range(96)]
+    cols = [[rows[r][c] for r in range(96)] for c in range(96)]
+
+    def line_ratio(lines):
+        means = [statistics.mean(l) for l in lines]
+        within = statistics.mean(statistics.pvariance(l) for l in lines)
+        return statistics.pvariance(means) / (within + 1)
+
+    ratio_h = line_ratio(rows)          # 가로줄무늬
+    ratio_v = line_ratio(cols)          # 세로줄무늬
+
+    quant = img.resize((96, 96)).quantize(colors=6, method=Image.Quantize.MEDIANCUT)
+    counts = sorted((c for c, _ in (quant.getcolors() or [(1, 0)])), reverse=True)
+    total = sum(counts) or 1
+    top1 = counts[0] / total
+    big = sum(1 for c in counts if c / total >= 0.12)
+
+    stripe = max(ratio_h, ratio_v)
+    axis = "h" if ratio_h >= ratio_v else "v"
+    return {"kind": "stripe" if stripe >= 3 else "solid",
+            "axis": axis if stripe >= 3 else None,
+            "top1": round(top1, 2), "colors": big, "stripe": round(stripe, 2)}
+
+
+def pattern_for(candidates, fallback_raw, referer, main_hex):
+    """패턴은 색상 칩으로 본다. 모델컷은 피부·배경·그림자 때문에 줄무늬가 묻힌다.
+    칩이 여러 개면 지금 보고 있는 색과 가장 가까운 칩을 쓴다."""
+    chips = [c for c in candidates if CHIP_RE.search(urlparse(c["url"]).path)]
+    if chips and main_hex:
+        want = tuple(int(main_hex[i:i + 2], 16) for i in (1, 3, 5))
+
+        def gap(c):
+            rgb = tuple(int(c["hex"][i:i + 2], 16) for i in (1, 3, 5))
+            return sum((a - b) ** 2 for a, b in zip(rgb, want))
+
+        for chip in sorted(chips, key=gap):
+            try:
+                chip_raw = grab(chip["url"], referer)
+                found = analyze_pattern(chip_raw)
+                found["from"] = "chip"
+                # 패턴 옷의 실제 색 구성. 모델컷 팔레트는 피부·배경이 섞여 못 쓴다.
+                found["palette"] = dominant_colors(chip_raw)
+                return found
+            except Exception:
+                continue
+
+    found = analyze_pattern(fallback_raw)
+    found["from"] = "photo"          # 믿을 수 없으니 자동 태그에 쓰지 않는다
+    return found
+
+
+# ---------------------------------------------------------------- 배경 제거 (컷아웃)
+def cutout(raw, tol=26, limit=560):
+    """스튜디오 단색 배경을 테두리에서부터 지워 투명 PNG로 만든다.
+    배경이 단색이 아니면 손대지 않고 원본을 돌려준다."""
+    img = open_rgb(raw)
+    img.thumbnail((limit, limit))
+    w, h = img.size
+    px = img.load()
+
+    edge = [px[x, 0] for x in range(0, w, 4)] + [px[x, h - 1] for x in range(0, w, 4)] \
+         + [px[0, y] for y in range(0, h, 4)] + [px[w - 1, y] for y in range(0, h, 4)]
+
+    # 모델 발이나 옷이 화면 끝에 닿는 경우가 많아 평균이 아니라 최빈색을 배경으로 본다.
+    # 버킷만으로는 같은 회색이 경계에서 쪼개지므로, 씨드를 잡고 허용범위로 다시 모은다.
+    buckets = {}
+    for c in edge:
+        buckets.setdefault(tuple(v // 32 for v in c), []).append(c)
+    seed = max(buckets.values(), key=len)
+    base = tuple(round(statistics.mean(c[i] for c in seed)) for i in range(3))
+    same = [c for c in edge if max(abs(c[i] - base[i]) for i in range(3)) <= tol]
+    if len(same) / len(edge) < 0.55:     # 테두리가 한 색으로 안 모인다 = 배경 있는 사진
+        return img, False
+    base = tuple(round(statistics.mean(c[i] for c in same)) for i in range(3))
+
+    def near(c):
+        return all(abs(c[i] - base[i]) <= tol for i in range(3))
+
+    # 테두리에서 시작해 배경색으로 이어진 영역만 지운다 (옷 안쪽 흰색은 남는다)
+    mask = bytearray(w * h)
+    stack = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)] \
+          + [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+    while stack:
+        x, y = stack.pop()
+        i = y * w + x
+        if mask[i] or not near(px[x, y]):
+            continue
+        mask[i] = 1
+        if x > 0:     stack.append((x - 1, y))
+        if x < w - 1: stack.append((x + 1, y))
+        if y > 0:     stack.append((x, y - 1))
+        if y < h - 1: stack.append((x, y + 1))
+
+    out = img.convert("RGBA")
+    alpha = Image.frombytes("L", (w, h), bytes(255 - m * 255 for m in mask))
+    out.putalpha(alpha)
+    box = out.getbbox()
+    if box:
+        out = out.crop(box)
+    return out, True
+
+
 # ---------------------------------------------------------------- 요청 처리
 def fetch_product(url):
     if not re.match(r"^https?://", url):
@@ -414,9 +880,9 @@ def fetch_product(url):
     res = sess.get(url, headers=HEADERS, timeout=15, allow_redirects=True)
     ctype = res.headers.get("Content-Type", "")
 
-    candidates, every = [], []
+    candidates, every, referer = [], [], None
     if ctype.startswith("image/"):
-        img_url, title, price = res.url, os.path.basename(urlparse(res.url).path), ""
+        img_url, title, price, currency = res.url, os.path.basename(urlparse(res.url).path), "", ""
         raw = res.content
     else:
         res.raise_for_status()
@@ -425,6 +891,8 @@ def fetch_product(url):
         img_url = pick_image(metas, html, res.url)
         title = pick_title(metas, html)
         price = pick_price(metas, html)
+        currency = pick_currency(metas, html)
+        referer = res.url
         every = collect_images(html, res.url)
         urls = [e["url"] for e in every]
         if img_url and img_url not in urls:
@@ -436,18 +904,69 @@ def fetch_product(url):
         raw = grab(img_url, res.url)
 
     name, _ = store(raw, img_url)
+    colors = dominant_colors(raw)
+    view = garment_view(candidates, img_url, referer, colors[0]["hex"] if colors else None)
+    if view:
+        colors, pattern, color_from = view["colors"], view["pattern"], "chip"
+    else:
+        pattern = analyze_pattern(raw)
+        pattern["from"] = "photo"
+        color_from = "photo"
     return {
         "url": url,
         "referer": res.url,
         "site": urlparse(url).netloc.replace("www.", ""),
         "title": title[:120],
         "price": price,
+        "currency": currency,
         "image": "/cache/" + name,
         "source": img_url,
-        "colors": dominant_colors(raw),
+        "colors": colors,
+        "pattern": pattern,
+        "color_from": color_from,
         "candidates": candidates,
         "all_candidates": [e["url"] for e in every],
     }
+
+
+def friendly_error(exc):
+    """requests 스택트레이스를 그대로 보여주면 읽을 수 없어서 한국어로 바꿔준다."""
+    if isinstance(exc, RuntimeError):
+        return str(exc)
+    if isinstance(exc, requests.exceptions.Timeout):
+        return "사이트가 응답하지 않아요. 잠시 뒤 다시 해보세요."
+    if isinstance(exc, requests.exceptions.HTTPError):
+        code = exc.response.status_code if exc.response is not None else 0
+        if code in (401, 403, 405, 429):
+            return (f"이 사이트가 자동 수집을 막고 있어요 ({code}). "
+                    "상품 이미지 주소를 직접 넣거나 색을 직접 지정해 주세요.")
+        if code == 404:
+            return "그 주소에는 상품이 없어요 (404). 주소를 다시 확인해 주세요."
+        return f"사이트가 오류를 냈어요 ({code})."
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return "주소를 못 찾았어요. 사이트 주소가 맞는지 확인해 주세요."
+    text = str(exc)
+    if "Invalid URL" in text or "No host supplied" in text:
+        return "주소 형식이 이상해요. https:// 로 시작하는 상품 주소를 넣어 주세요."
+    if isinstance(exc, (ValueError, TypeError)):
+        return "입력값이 올바르지 않아요."
+    return "불러오지 못했어요. 상품 이미지 주소를 직접 넣어 보세요."
+
+
+def trim_cache(limit=600, keep=400):
+    """개인용이라 캐시를 안 지우면 계속 쌓인다. 오래된 이미지부터 정리한다."""
+    try:
+        files = [os.path.join(CACHE, f) for f in os.listdir(CACHE) if f.endswith((".png", ".meta"))]
+        if len(files) <= limit:
+            return
+        files.sort(key=lambda f: os.path.getmtime(f))
+        for f in files[:len(files) - keep]:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -474,17 +993,40 @@ class Handler(SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(blob)
                     return
+                if parsed.path == "/api/cutout":
+                    src = one("u")
+                    name = "c_" + hashlib.sha1(src.encode()).hexdigest()[:16] + ".png"
+                    path = os.path.join(CACHE, name)
+                    if not os.path.exists(path):
+                        img, removed = cutout(grab(src, one("r") or None))
+                        img.save(path, "PNG")
+                        with open(path + ".meta", "w") as f:
+                            f.write("1" if removed else "0")
+                    with open(path + ".meta") as f:
+                        removed = f.read() == "1"
+                    return self._json(200, {"image": "/cache/" + name, "removed": removed})
                 if parsed.path == "/api/image":
-                    raw = grab(one("u"), one("r") or None)
-                    name, _ = store(raw, one("u"))
+                    src_u = one("u")
+                    raw = grab(src_u, one("r") or None)
+                    name, _ = store(raw, src_u)
+                    found = analyze_pattern(raw)
+                    found["from"] = "chip" if CHIP_RE.search(urlparse(src_u).path) else "photo"
                     return self._json(200, {
                         "image": "/cache/" + name,
-                        "source": one("u"),
+                        "source": src_u,
                         "colors": dominant_colors(raw),
+                        "pattern": found,
                     })
                 if parsed.path == "/api/climate":
-                    lat, lon = float(one("lat")), float(one("lon"))
-                    month = int(one("month") or dt.date.today().month)
+                    try:
+                        lat, lon = float(one("lat")), float(one("lon"))
+                        month = int(one("month") or dt.date.today().month)
+                    except ValueError:
+                        raise RuntimeError("여행지를 다시 골라 주세요.")
+                    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                        raise RuntimeError("좌표 범위를 벗어났어요.")
+                    if not 1 <= month <= 12:
+                        raise RuntimeError("월은 1~12 사이여야 해요.")
                     payload = {"climate": climate(lat, lon, month)}
                     if one("forecast") == "1":
                         try:
@@ -493,7 +1035,7 @@ class Handler(SimpleHTTPRequestHandler):
                             payload["forecast"] = []
                     return self._json(200, payload)
             except Exception as exc:
-                return self._json(200, {"error": str(exc) or exc.__class__.__name__})
+                return self._json(200, {"error": friendly_error(exc)})
             return self.send_error(404)
         if parsed.path in ("/", "/index.html"):
             self.path = "/static/index.html"
@@ -507,8 +1049,8 @@ class Handler(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
             data = fetch_product((body.get("url") or "").strip())
             self._json(200, data)
-        except Exception as exc:  # 사용자에게 그대로 보여준다
-            self._json(200, {"error": str(exc) or exc.__class__.__name__})
+        except Exception as exc:
+            self._json(200, {"error": friendly_error(exc)})
 
     def _json(self, code, obj):
         payload = json.dumps(obj, ensure_ascii=False).encode()
@@ -524,5 +1066,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    trim_cache()
     print(f"\n  코디 체커 → http://localhost:{PORT}\n  (끄려면 Ctrl+C)\n")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
