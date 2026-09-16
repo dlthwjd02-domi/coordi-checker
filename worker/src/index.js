@@ -82,6 +82,15 @@ export default {
 
     const headers = {
       'User-Agent': UA,
+      'sec-ch-ua': '"Chromium";v="125", "Not(A:Brand";v="24", "Google Chrome";v="125"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"macOS"',
+      'sec-fetch-dest': isImage ? 'image' : 'document',
+      'sec-fetch-mode': isImage ? 'no-cors' : 'navigate',
+      'sec-fetch-site': isImage ? 'cross-site' : 'none',
+      'sec-fetch-user': '?1',
+      'upgrade-insecure-requests': '1',
+      'cache-control': 'max-age=0',
       'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
       // AVIF 는 브라우저 지원이 갈려서 요청하지 않는다 (Canvas 로 읽어야 한다)
       'Accept': isImage

@@ -24,10 +24,10 @@ const relayImg = (url, referer) =>
 function loadImage(url, referer){
   return new Promise((ok, fail) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (!url.startsWith('data:')) img.crossOrigin = 'anonymous';
     img.onload = () => ok(img);
     img.onerror = () => fail(new Error('이미지를 불러오지 못했어요.'));
-    img.src = relayImg(url, referer);
+    img.src = url.startsWith('data:') ? url : relayImg(url, referer);   // 내 사진은 그대로
   });
 }
 
@@ -428,10 +428,56 @@ async function garmentView(candidates, mainUrl, referer, mainHex){
 }
 
 /* ---------------------------------------------------------------- 상품 불러오기 */
+// 앱 공유 링크는 진짜 주소를 쿼리에 담고 있다. 먼저 풀어야 상품 페이지에 닿는다.
+const DEEPLINK_HOST = /(onelink\.me|app\.link|page\.link|smart\.link|adj\.st|bit\.ly|naver\.me)$/i;
+const DEEPLINK_KEYS = ['af_web_dp', 'af_dp', 'af_r', 'deep_link_value', 'url', 'link', 'u',
+                       'target', 'redirect', 'redirect_url'];
+
+function unwrapDeeplink(url){
+  let out = url;
+  for (let i = 0; i < 3; i++) {                  // 두 번 감싼 링크도 있다
+    let u;
+    try { u = new URL(out); } catch { return out; }
+    if (!DEEPLINK_HOST.test(u.hostname)) return out;
+    let next = null;
+    for (const key of DEEPLINK_KEYS) {
+      const v = u.searchParams.get(key);
+      if (v && /^https?:\/\//i.test(v)) { next = v; break; }
+    }
+    if (!next) return out;
+    out = next;
+  }
+  return out;
+}
+
+/* 내 사진 올리기 — 자동 수집을 막는 사이트나 앱에서만 보이는 상품은 이 길이 확실하다 */
+async function getLocalPhoto(file){
+  if (!file || !file.type || !file.type.startsWith('image/'))
+    throw new Error('이미지 파일만 넣어 주세요 (jpg, png, heic 등).');
+  const dataUrl = await new Promise((ok, fail) => {
+    const reader = new FileReader();
+    reader.onload = () => ok(reader.result);
+    reader.onerror = () => fail(new Error('파일을 읽지 못했어요.'));
+    reader.readAsDataURL(file);
+  });
+  const img = await loadImage(dataUrl, null);
+  const pattern = analyzePattern(img);
+  pattern.from = 'photo';
+  return {
+    url: '', referer: '', site: '내 사진',
+    title: (file.name || '사진').replace(/\.[^.]+$/, '').slice(0, 60),
+    price: '', currency: '',
+    image: dataUrl, source: dataUrl,
+    colors: dominantColors(img), pattern, color_from: 'photo',
+    candidates: [], all_candidates: [], local: true,
+  };
+}
+
 async function getProduct(raw){
   let url = (raw || '').trim();
   if (!url) throw new Error('주소 형식이 이상해요. https:// 로 시작하는 상품 주소를 넣어 주세요.');
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  url = unwrapDeeplink(url);
 
   // 이미지 주소를 직접 넣은 경우
   if (IMG_EXT.test(url)) {
@@ -665,5 +711,5 @@ async function getClimate(lat, lon, month, withForecast){
   return { climate, forecast };
 }
 
-window.coordi = { getProduct, getImageInfo, getCutout, searchPlaces, getClimate,
-                  thumb: relayImg };
+window.coordi = { getProduct, getLocalPhoto, getImageInfo, getCutout,
+                  searchPlaces, getClimate, thumb: relayImg };

@@ -43,6 +43,8 @@
   button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
   button:disabled{opacity:.45;cursor:default}
   .status{font-size:12px;color:var(--muted);margin-top:5px;min-height:16px}
+  .slot{border-radius:10px;transition:background .12s}
+  .slot.drop{background:#efe9df;box-shadow:0 0 0 2px var(--ink) inset}
   .status.err{color:var(--bad)}
 
   select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fbfaf9;font:inherit;font-size:13px}
@@ -192,7 +194,8 @@
   <header>
     <h1>코디 체커</h1>
     <p>먼저 여행지와 시기를 고르고, 상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려줘요.</p>
-    <p class="sub" style="margin-top:6px">설치 없이 이 화면에서 바로 돌아갑니다 ·
+    <p class="sub" style="margin-top:6px">설치 없이 이 화면에서 바로 돌아갑니다. 주소가 막히는 쇼핑몰은
+      <b>사진</b> 버튼으로 올리면 돼요 ·
       <a href="local.html" style="color:inherit">내 맥에서 돌리기</a></p>
   </header>
 
@@ -271,12 +274,63 @@ $('#slots').innerHTML = ROLES.map(r => `
     <div class="row">
       <input type="text" id="in-${r.key}" placeholder="상품 페이지 또는 이미지 주소" autocomplete="off">
       <button data-load="${r.key}">불러오기</button>
+      <button class="ghost" data-photo="${r.key}" title="내 사진 올리기 (끌어다 놓거나 붙여넣기도 됩니다)">사진</button>
+      <input type="file" accept="image/*" id="file-${r.key}" hidden>
     </div>
     <div class="status" id="st-${r.key}"></div>
   </div>`).join('');
 
 document.querySelectorAll('[data-load]').forEach(b =>
   b.onclick = () => load(b.dataset.load));
+
+/* 내 사진 올리기 — 자동 수집을 막는 쇼핑몰이나 앱에서만 보이는 상품은 이 길이 확실하다.
+   버튼(휴대폰에서도 사진 앱이 열린다), 끌어다 놓기, 붙여넣기 세 가지를 받는다. */
+let lastSlot = 'top';
+
+document.querySelectorAll('[data-photo]').forEach(b =>
+  b.onclick = () => { lastSlot = b.dataset.photo; $('#file-' + b.dataset.photo).click(); });
+
+ROLES.forEach(r => {
+  const file = $('#file-' + r.key);
+  file.onchange = () => { if (file.files[0]) usePhoto(r.key, file.files[0]); file.value = ''; };
+
+  const slot = file.closest('.slot');
+  slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('drop'); });
+  slot.addEventListener('dragleave', () => slot.classList.remove('drop'));
+  slot.addEventListener('drop', e => {
+    e.preventDefault();
+    slot.classList.remove('drop');
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) { lastSlot = r.key; usePhoto(r.key, dropped); }
+  });
+  $('#in-' + r.key).addEventListener('focus', () => { lastSlot = r.key; });
+});
+
+document.addEventListener('paste', e => {
+  const shot = [...(e.clipboardData && e.clipboardData.items || [])]
+    .find(i => i.type && i.type.startsWith('image/'));
+  if (!shot) return;                       // 글자 붙여넣기는 그대로 둔다
+  e.preventDefault();
+  usePhoto(lastSlot, shot.getAsFile());
+});
+
+async function usePhoto(key, file){
+  const st = $('#st-' + key);
+  st.className = 'status';
+  st.textContent = '사진 읽는 중…';
+  try {
+    const data = await coordi.getLocalPhoto(file);
+    data.pick = 0;
+    data.tag = autoTag(data.pattern);
+    state[key] = data;
+    $('#in-' + key).value = '';
+    st.textContent = '내 사진 · ' + data.title.slice(0, 22);
+    render();
+  } catch (e) {
+    st.className = 'status err';
+    st.textContent = e.message;
+  }
+}
 ROLES.forEach(r => $('#in-'+r.key).addEventListener('keydown', e => {
   if (e.key === 'Enter') load(r.key);
 }));
@@ -295,10 +349,11 @@ function priceText(d){
   return sym ? sym + n.toLocaleString() : n.toLocaleString() + ' ' + cur;
 }
 
-// 색상 칩에서 본 줄무늬만 자동으로 찍어준다.
-// 모델컷은 피부·배경·그림자 때문에 줄무늬 신호가 묻혀서 믿을 수 없다.
+// 색상 칩은 옷 색만 있어서 줄무늬 판정을 믿을 수 있다(칩 23~103 대 무지 0.02~0.06).
+// 모델컷은 피부·배경·그림자 때문에 신호가 묻히므로(줄무늬 옷도 0.2~0.9) 아주 강할 때만 인정한다.
 function autoTag(pattern){
-  return (pattern && pattern.from === 'chip' && pattern.kind === 'stripe') ? 'stripe' : 'solid';
+  if (!pattern || pattern.kind !== 'stripe') return 'solid';
+  return (pattern.from === 'chip' || pattern.stripe >= 8) ? 'stripe' : 'solid';
 }
 
 async function load(key){
@@ -318,7 +373,9 @@ async function load(key){
     render();
   } catch (e) {
     st.className = 'status err';
-    st.textContent = e.message;
+    st.textContent = e.message
+      + (/자동 수집|이미지를 못 찾|응답하지/.test(e.message)
+          ? ' → 옆의 “사진” 버튼으로 상품 사진을 올리면 됩니다.' : '');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '불러오기'; }
   }
