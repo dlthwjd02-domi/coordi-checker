@@ -55,6 +55,8 @@ function parseTarget(raw) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
   if (BLOCKED_HOST.test(url.hostname)) return null;
+  // 점이 없는 호스트(asdfqwer 같은 오타)는 주소가 아니다
+  if (!url.hostname.includes('.')) return null;
   return url;
 }
 
@@ -116,11 +118,15 @@ export default {
 
     if (!upstream.ok) {
       const code = upstream.status;
+      // 5xx 중 521~530 은 Cloudflare 가 그 사이트에 닿지 못했다는 뜻이다
+      const unreachable = [521, 522, 523, 524, 525, 526, 527, 530].includes(code);
       const message = code === 404
         ? '그 주소에는 상품이 없어요 (404). 주소를 다시 확인해 주세요.'
-        : [401, 403, 405, 429].includes(code)
-          ? `이 사이트가 자동 수집을 막고 있어요 (${code}). 상품 이미지 주소를 직접 넣거나 색을 직접 지정해 주세요.`
-          : `사이트가 오류를 냈어요 (${code}).`;
+        : unreachable
+          ? '주소를 못 찾았어요. 사이트 주소가 맞는지 확인해 주세요.'
+          : [401, 403, 405, 429].includes(code)
+            ? `이 사이트가 자동 수집을 막고 있어요 (${code}). 상품 이미지 주소를 직접 넣거나 색을 직접 지정해 주세요.`
+            : `사이트가 오류를 냈어요 (${code}).`;
       return bad(message, 200, origin);   // 앱이 문구를 그대로 보여주도록 200 으로
     }
 

@@ -10,24 +10,36 @@
  * 켜져 있으면 자동으로 로컬을 쓴다. */
 const WORKER_RELAY = 'https://coordi-fetch.domii.workers.dev';
 const LOCAL_RELAY = 'http://127.0.0.1:8787/api';
-// 이 페이지 자체가 내 맥의 서버에서 왔으면 같은 출처의 중계를 바로 쓴다 (권한 문제 없음)
-const SERVED_LOCALLY = typeof location !== 'undefined'
-  && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-let relayBase = SERVED_LOCALLY ? `${location.origin}/api` : WORKER_RELAY;
-let localCheck = SERVED_LOCALLY ? Promise.resolve(true) : null;
+// 이 페이지가 내 맥의 서버에서 왔으면 같은 출처의 중계를 쓴다(권한 문제 없음).
+// 다만 호스트 이름만 보면 안 된다 — localhost 의 다른 포트(정적 서버 등)에서 열면
+// 없는 /api 를 중계로 잡아 전부 실패한다. 반드시 health 로 확인한다.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1'];
+const SAME_ORIGIN_API = typeof location !== 'undefined' && LOCAL_HOSTS.includes(location.hostname)
+  ? `${location.origin}/api` : null;
+let relayBase = WORKER_RELAY;
+let localCheck = null;
 let localError = '';
+
+async function alive(base){
+  try {
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), 900);
+    const res = await fetch(`${base}/health`, { signal: stop.signal });
+    clearTimeout(timer);
+    return res.ok && (await res.json()).relay === true;
+  } catch (e) {
+    localError = (e && e.name) + ': ' + (e && e.message);
+    return false;
+  }
+}
 
 function checkLocal(){
   if (localCheck) return localCheck;
   localCheck = (async () => {
-    try {
-      const stop = new AbortController();
-      const timer = setTimeout(() => stop.abort(), 900);
-      const res = await fetch(`${LOCAL_RELAY}/health`, { signal: stop.signal });
-      clearTimeout(timer);
-      if (res.ok && (await res.json()).relay) { relayBase = LOCAL_RELAY; return true; }
-    } catch (e) { localError = (e && e.name) + ': ' + (e && e.message); }
-    return false;
+    for (const base of [SAME_ORIGIN_API, LOCAL_RELAY]) {
+      if (base && await alive(base)) { relayBase = base; return true; }
+    }
+    return false;                              // 없으면 워커로
   })();
   return localCheck;
 }
