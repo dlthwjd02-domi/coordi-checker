@@ -91,7 +91,8 @@
     overflow:hidden;background:linear-gradient(#efece7,#e5e1db);border:1px solid var(--line)}
   .win{position:absolute;left:0;right:0;overflow:hidden}
   .win img{position:absolute;left:50%;top:0;width:100%;
-    transform:translateX(-50%) translateY(var(--y)) scale(var(--s));transform-origin:top center}
+    transform:translateX(calc(-50% + var(--x))) translateY(var(--y)) scale(var(--s));
+    transform-origin:top center}
   .win.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
   .fitctl{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:8px 10px;
     align-items:center;margin-top:16px;font-size:12px;color:var(--muted)}
@@ -225,6 +226,12 @@ ROLES.forEach(r => $('#in-'+r.key).addEventListener('keydown', e => {
   if (e.key === 'Enter') load(r.key);
 }));
 
+// 색상 칩에서 본 줄무늬만 자동으로 찍어준다.
+// 모델컷은 피부·배경·그림자 때문에 줄무늬 신호가 묻혀서 믿을 수 없다.
+function autoTag(pattern){
+  return (pattern && pattern.from === 'chip' && pattern.kind === 'stripe') ? 'stripe' : 'solid';
+}
+
 async function load(key){
   const input = $('#in-'+key), st = $('#st-'+key);
   const url = input.value.trim();
@@ -238,9 +245,7 @@ async function load(key){
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     data.pick = 0;
-    // 줄무늬 신호가 뚜렷할 때만 자동으로 찍어주고, 나머지는 사용자가 정한다
-    data.tag = (data.pattern && data.pattern.kind === 'stripe' && data.pattern.stripe >= 2.5)
-      ? 'stripe' : 'solid';
+    data.tag = autoTag(data.pattern);
     state[key] = data;
     st.textContent = data.site + (data.price ? ' · ' + Number(data.price.replace(/[^0-9.]/g,'')).toLocaleString() + '원' : '');
     render();
@@ -273,7 +278,8 @@ const hsl = hex => rgbToHsl(...hexToRgb(hex));
 const PATTERN_LABEL = {solid:'무지', stripe:'줄무늬', pattern:'패턴'};
 const PATTERN_LONG  = {solid:'무지', stripe:'줄무늬', pattern:'패턴·그래픽'};
 
-// 패턴 옷은 대표색 하나로 볼 수 없어서, 비중이 있는 색을 최대 3개까지 쓴다
+// 패턴 옷은 대표색 하나로 볼 수 없어서, 비중이 있는 색을 최대 3개까지 쓴다.
+// 패턴 옷이면 모델컷 대신 색상 칩에서 뽑은 색을 쓴다 (피부·배경이 안 섞임).
 function paletteOf(key){
   const it = state[key];
   if (!it) return [];
@@ -618,7 +624,9 @@ async function swapImage(key, u){
       `/api/image?u=${encodeURIComponent(u)}&r=${encodeURIComponent(it.referer || '')}`)).json();
     if (r.error) throw new Error(r.error);
     Object.assign(it, {image:r.image, colors:r.colors, source:r.source, pick:0});
+    if (r.pattern) { it.pattern = r.pattern; it.tag = autoTag(r.pattern); }
     delete it.manual;
+    delete it.cut; delete it.cutDone;       // 컷아웃 다시 만든다
     st.textContent = '색을 바꿨어요.';
     render();
   } catch (e) {
@@ -628,7 +636,7 @@ async function swapImage(key, u){
 
 /* ---------------------------------------------------------------- 핏 뷰 */
 let fitMode = 'side';
-const fitCtl = {top:{s:1.6, y:-12}, bottom:{s:1.6, y:-52}};
+const fitCtl = {top:{s:1.6, y:-12, x:0}, bottom:{s:1.6, y:-52, x:0}};
 
 document.querySelectorAll('#fitmode button').forEach(b => b.onclick = () => {
   fitMode = b.dataset.mode;
@@ -682,7 +690,7 @@ function renderFit(){
         const box = `top:${top}%;height:${h}%`;
         if (!it) return `<div class="win empty" style="${box}">${name} 없음</div>`;
         const c = fitCtl[k];
-        return `<div class="win" data-slot="${k}" style="${box};--s:${c.s};--y:${c.y}%">
+        return `<div class="win" data-slot="${k}" style="${box};--s:${c.s};--y:${c.y}%;--x:${c.x}%">
           <img src="${it.cut || it.image}" alt="${name}">
         </div>`;
       }).join('')}
@@ -692,8 +700,10 @@ function renderFit(){
         const c = fitCtl[k];
         return `<b>${name} 크기</b>
           <input type="range" min="0.8" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
-          <b>${name} 위치</b>
-          <input type="range" min="-180" max="20" step="1" value="${c.y}" data-fit="${k}:y">`;
+          <b>${name} 위아래</b>
+          <input type="range" min="-180" max="20" step="1" value="${c.y}" data-fit="${k}:y">
+          <b>${name} 좌우</b>
+          <input type="range" min="-60" max="60" step="1" value="${c.x}" data-fit="${k}:x">`;
       }).join('')}
     </div>
     <div class="status" style="margin-top:10px">배경을 지운 사진을 위아래로 겹쳐 봅니다. 슬라이더로 옷이 보이는 위치를 맞추세요.</div>`;
@@ -704,7 +714,7 @@ function renderFit(){
     inp.oninput = () => {
       fitCtl[k][prop] = Number(inp.value);
       const win = el.querySelector(`.win[data-slot="${k}"]`);
-      if (win) win.style.setProperty(prop === 's' ? '--s' : '--y',
+      if (win) win.style.setProperty('--' + prop,
         prop === 's' ? inp.value : inp.value + '%');
     };
   });
@@ -728,7 +738,8 @@ function render(){
         <div class="role">${r.name}</div>
         <div class="name">${it.title || it.site}</div>
       </div>
-      <div class="rep">대표색 ${colorName(hsl(repColor(r.key)))}${it.manual ? ' · 직접 지정' : ''}</div>
+      <div class="rep">대표색 ${colorName(hsl(repColor(r.key)))}${
+        it.manual ? ' · 직접 지정' : it.color_from === 'chip' ? ' · 색상 칩 기준' : ''}</div>
       <div class="tools">
         ${n > 1 ? `<button class="ghost mini" data-pick="${r.key}">다른 색 ${n}개</button>` : ''}
         <input type="color" data-manual="${r.key}" value="${repColor(r.key)}" title="색 직접 지정">
