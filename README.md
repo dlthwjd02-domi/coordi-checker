@@ -1,14 +1,35 @@
 # 코디 체커
 
 상하의 상품 URL을 넣으면 이미지에서 실제 색을 뽑아 어울리는지 점수로 알려주고,
-여행지 기온까지 맞춰 보는 로컬 웹 도구.
+여행지 기온까지 맞춰 보는 도구.
 
-**설치 안내 → https://dlthwjd02-domi.github.io/coordi-checker/**
+**바로 쓰기 → https://dlthwjd02-domi.github.io/coordi-checker/**
 
-상품 이미지는 CORS·핫링크 때문에 브라우저만으로는 못 가져오므로 파이썬 서버가 대신 긁어온다.
-그래서 GitHub Pages 같은 정적 호스팅으로는 돌아가지 않고, 각자 맥에서 서버를 켜야 한다.
+설치가 필요 없다. 링크를 열면 그 화면에서 바로 돌아간다.
 
-## 설치와 실행
+## 어떻게 서버 없이 돌아가나
+
+브라우저는 다른 사이트의 HTML·이미지를 직접 읽을 수 없다 (CORS, 핫링크 차단).
+그래서 **가져오기만** Cloudflare Worker 가 대신하고, **색 추출·패턴 판별·배경 제거는
+브라우저가 Canvas 로 직접** 한다. 정적 사이트라 잠들지 않고 바로 열린다.
+
+```
+GitHub Pages (정적)          Cloudflare Worker          쇼핑몰
+ docs/index.html  ──fetch──▶  /page?u=…  ──────────▶  상품 페이지 HTML
+ docs/core.js     ──<img>──▶  /img?u=&r=  ─────────▶  상품 이미지
+   └ Canvas 로 색·패턴·배경 제거
+
+ 기온·지역 검색은 Open-Meteo / OpenStreetMap 을 브라우저에서 직접 호출
+ (둘 다 Access-Control-Allow-Origin: * 을 준다)
+```
+
+Worker 는 `worker/` 에 있고 `npx wrangler deploy` 로 올린다.
+호출 출처를 제한하고 사설망 주소를 막아 열린 중계로 쓰이지 않게 했다.
+
+## 내 맥에서 돌리기 (선택)
+
+파이썬 서버로도 같은 기능이 돌아간다. 상품 페이지를 내 맥이 직접 가져오고
+사진도 내 컴퓨터에만 남는다. 안내: https://dlthwjd02-domi.github.io/coordi-checker/local.html
 
 1. [폴더 내려받기](https://github.com/dlthwjd02-domi/coordi-checker/archive/refs/heads/main.zip) 후 압축 풀기
 2. `start.command` 더블클릭 — 브라우저가 자동으로 열린다
@@ -16,18 +37,18 @@
 처음 한 번은 `.venv` 를 만들고 꾸러미를 깔아서 1~2분 걸린다. 맥 전체 파이썬 설정은 건드리지 않는다.
 "확인되지 않은 개발자" 경고가 뜨면 `start.command` 를 우클릭 → 열기 로 한 번만 실행하면 된다.
 
-끄려면 터미널 창을 닫거나 `Ctrl+C`. 이미 켜져 있으면 다시 더블클릭해도 브라우저만 열린다.
-
-직접 돌릴 때는 이렇게 한다.
-
 ```
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python server.py        # http://localhost:8787
 pkill -f server.py                # 종료
 ```
 
-의존성은 `requests`, `Pillow` 뿐이다. 포트는 `PORT` 환경변수로 바꿀 수 있다.
-서버는 `127.0.0.1` 에만 붙으므로 같은 네트워크의 다른 기기에서는 접속할 수 없다.
+의존성은 `requests`, `Pillow` 뿐이다. 서버는 `127.0.0.1` 에만 붙는다.
+
+**같은 로직이 두 곳에 있다** — `server.py`(파이썬)와 `docs/core.js`(브라우저).
+웹 쪽이 주된 구현이고, 파이썬 쪽은 로컬 실행용으로 남겼다. 한쪽을 고치면 다른 쪽도 봐야 한다.
+양자화 방식이 달라서(Pillow MEDIANCUT vs 중앙값 분할 + k-means) 대표색이 몇 단계씩 다를 수 있다.
+같은 상품 8종으로 대조한 결과는 [AUDIT.md](AUDIT.md) 에 있다.
 
 ## 파일
 
@@ -38,7 +59,10 @@ pkill -f server.py                # 종료
 | `start.command` | 더블클릭 런처 |
 | `cache/` | 내려받은 이미지와 기후 조회 결과 (git 추적 안 함) |
 | `requirements.txt` | `requests`, `Pillow` |
-| `docs/` | GitHub Pages 설치 안내 페이지 |
+| `docs/index.html` | 웹 앱 (GitHub Pages 로 서비스) |
+| `docs/core.js` | 브라우저용 엔진 — 가져오기·색·패턴·배경 제거 |
+| `docs/local.html` | 내 맥에서 돌리는 방법 안내 |
+| `worker/` | Cloudflare Worker (상품 페이지·이미지 가져오기 중계) |
 | `AUDIT.md` | 전체 점검 기록 |
 
 ## 쓰는 흐름

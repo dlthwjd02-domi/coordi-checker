@@ -534,7 +534,12 @@ def store(raw, url, maxpx=900, prefix=""):
 
 
 def annotate_colors(urls, referer, gap=14):
-    """후보마다 대표색을 뽑고, 색이 거의 같은 것(같은 색 다른 각도)은 한 장만 남긴다."""
+    """후보마다 대표색을 뽑는다. (전체, 화면에 보여줄 목록) 을 돌려준다.
+
+    색이 거의 같은 것(같은 색 다른 각도)은 화면에서 한 장만 보여주지만,
+    칩을 고를 때는 전체를 써야 한다. 대표 사진과 같은 컬러웨이의 칩은 색이 비슷해서
+    걸러지는데, 그게 바로 우리가 찾는 칩이다.
+    """
     def one(u):
         try:
             raw = grab(u, referer)
@@ -555,7 +560,7 @@ def annotate_colors(urls, referer, gap=14):
             continue
         kept.append(item)
         rgbs.append(rgb)
-    return kept
+    return got, kept
 
 
 # ---------------------------------------------------------------- 패턴 판별
@@ -743,7 +748,12 @@ def store(raw, url, maxpx=900, prefix=""):
 
 
 def annotate_colors(urls, referer, gap=14):
-    """후보마다 대표색을 뽑고, 색이 거의 같은 것(같은 색 다른 각도)은 한 장만 남긴다."""
+    """후보마다 대표색을 뽑는다. (전체, 화면에 보여줄 목록) 을 돌려준다.
+
+    색이 거의 같은 것(같은 색 다른 각도)은 화면에서 한 장만 보여주지만,
+    칩을 고를 때는 전체를 써야 한다. 대표 사진과 같은 컬러웨이의 칩은 색이 비슷해서
+    걸러지는데, 그게 바로 우리가 찾는 칩이다.
+    """
     def one(u):
         try:
             raw = grab(u, referer)
@@ -764,7 +774,7 @@ def annotate_colors(urls, referer, gap=14):
             continue
         kept.append(item)
         rgbs.append(rgb)
-    return kept
+    return got, kept
 
 
 # ---------------------------------------------------------------- 패턴 판별
@@ -887,7 +897,7 @@ def fetch_product(url):
     res = sess.get(url, headers=HEADERS, timeout=15, allow_redirects=True)
     ctype = res.headers.get("Content-Type", "")
 
-    candidates, every, referer = [], [], None
+    candidates, every, every_shot, referer = [], [], [], None
     if ctype.startswith("image/"):
         img_url, title, price, currency = res.url, os.path.basename(urlparse(res.url).path), "", ""
         raw = res.content
@@ -907,12 +917,12 @@ def fetch_product(url):
         if not every:
             raise RuntimeError("상품 이미지를 못 찾았어요. 색을 직접 지정해 주세요.")
         img_url = img_url or every[0]["url"]
-        candidates = annotate_colors(pick_color_set(every, img_url), res.url)
+        every_shot, candidates = annotate_colors(pick_color_set(every, img_url), res.url)
         raw = grab(img_url, res.url)
 
     name, _ = store(raw, img_url)
     colors = dominant_colors(raw)
-    view = garment_view(candidates, img_url, referer, colors[0]["hex"] if colors else None)
+    view = garment_view(every_shot, img_url, referer, colors[0]["hex"] if colors else None)
     if view:
         colors, pattern, color_from = view["colors"], view["pattern"], "chip"
     else:
