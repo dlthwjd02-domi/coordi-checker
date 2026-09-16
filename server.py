@@ -191,13 +191,17 @@ def climate(lat, lon, month):
             return json.load(f)
 
     year = dt.date.today().year
-    res = requests.get(ARCHIVE_API, params={
-        "latitude": lat, "longitude": lon,
-        "start_date": f"{year - 3}-01-01", "end_date": f"{year - 1}-12-31",
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum",
-        "timezone": "auto",
-    }, timeout=30)
-    res.raise_for_status()
+    try:
+        res = requests.get(ARCHIVE_API, params={
+            "latitude": lat, "longitude": lon,
+            "start_date": f"{year - 3}-01-01", "end_date": f"{year - 1}-12-31",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum",
+            "timezone": "auto",
+        }, timeout=30)
+        res.raise_for_status()
+    except requests.exceptions.RequestException:
+        # 기온은 Open-Meteo 에서 가져오므로, 쇼핑몰 오류처럼 보이지 않게 따로 안내한다
+        raise RuntimeError("기온 자료 서버가 지금 응답하지 않아요. 잠시 뒤 다시 해보세요.")
     d = res.json().get("daily", {})
     times = d.get("time") or []
 
