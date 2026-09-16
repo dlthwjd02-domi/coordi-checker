@@ -22,7 +22,7 @@
   p{margin:0 0 12px}
   img{max-width:100%;display:block;border:1px solid var(--line);border-radius:12px}
   .shots{display:grid;grid-template-columns:1fr;gap:14px;margin:20px 0 8px}
-  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
   @media (max-width:640px){.pair{grid-template-columns:1fr}}
   figcaption{font-size:13px;color:var(--muted);margin-top:7px}
   figure{margin:0}
@@ -33,7 +33,7 @@
   ol.steps li::before{content:counter(s);position:absolute;left:0;top:2px;width:26px;height:26px;
     border-radius:50%;background:var(--ink);color:#fff;font-size:13px;font-weight:700;
     display:flex;align-items:center;justify-content:center}
-  ol.steps b{display:block;font-size:16px;margin-bottom:3px}
+  ol.steps li > b{display:block;font-size:16px;margin-bottom:3px}
   ol.steps span{font-size:15px;color:#5b5752}
   code{background:#eeebe6;padding:2px 6px;border-radius:5px;font-size:14px;
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -141,7 +141,7 @@
   <ul>
     <li>쿠팡·에이블리처럼 자동 수집을 막는 사이트는 안 됩니다. 상품 이미지 주소를 직접 넣거나
       색을 직접 지정하면 돼요. 무신사·유니클로·나이키·아임웹 쇼핑몰은 잘 됩니다.</li>
-    <li>서버는 내 맥에서만 열립니다(<code>127.0.0.1</code>). 같은 와이파이의 다른 사람은 볼 수 없어요.</li>
+    <li>서버는 내 맥 안에서만 열려요. 같은 와이파이를 쓰는 다른 사람도 볼 수 없습니다.</li>
     <li>저장한 코디는 그 브라우저에만 남습니다. 다른 기기로는 안 넘어갑니다.</li>
     <li>기온 데이터는 Open-Meteo, 지역 검색은 Open-Meteo와 OpenStreetMap을 씁니다.
       가입이나 키 발급은 필요 없어요.</li>
