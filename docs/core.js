@@ -137,6 +137,25 @@ const isStudioBg = p =>
   (p[0] > 238 && p[1] > 238 && p[2] > 238) ||
   (Math.max(p[0], p[1], p[2]) - Math.min(p[0], p[1], p[2]) < 10 && p[0] > 225);
 
+// 배경을 지운 캔버스에서 색을 뽑는다. 투명한 부분은 건너뛰고, 사람 사진이면
+// 얼굴·머리·다리가 섞이지 않게 가운데(몸통) 쪽만 본다.
+function dominantColorsOfCanvas(cv, n = 5){
+  const sx = Math.round(cv.width * 0.18), sy = Math.round(cv.height * 0.12);
+  const sw = Math.round(cv.width * 0.82) - sx, sh = Math.round(cv.height * 0.92) - sy;
+  const k = Math.min(1, 140 / Math.max(sw, sh));
+  const tw = Math.max(1, Math.round(sw * k)), th = Math.max(1, Math.round(sh * k));
+  const small = document.createElement('canvas');
+  small.width = tw; small.height = th;
+  small.getContext('2d').drawImage(cv, sx, sy, sw, sh, 0, 0, tw, th);
+
+  const d = small.getContext('2d', { willReadFrequently: true })
+    .getImageData(0, 0, tw, th).data;
+  const px = [];
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) px.push([d[i], d[i + 1], d[i + 2]]);
+  if (px.length < 40) return null;
+  return medianCut(px, Math.max(n, 4)).slice(0, n);
+}
+
 function dominantColors(img, n = 5){
   const px = pixelsOf(cropCenter(img, 140));
   let kept = px.filter(p => !isStudioBg(p));
@@ -243,6 +262,100 @@ function cutout(img, tol = 26, limit = 560){
   out.width = maxX - minX + 1; out.height = maxY - minY + 1;
   out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
   return { canvas: out, removed: true };
+}
+
+/* ---------------------------------------------------------------- 모델로 누끼 따기
+ * 단색 배경은 위의 cutout() 이 더 깔끔하다. 휴대폰으로 찍은 사진처럼 배경이 지저분하면
+ * 그때만 MediaPipe 사람 분리 모델(Apache 2.0, 0.2MB)을 받아서 실루엣을 딴다. */
+const MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18';
+const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter'
+  + '/selfie_segmenter/float16/1/selfie_segmenter.tflite';
+
+let segmenterJob = null;
+
+function getSegmenter(){
+  if (!segmenterJob) segmenterJob = (async () => {
+    const vision = await import(`${MP_BASE}/vision_bundle.mjs`);
+    const files = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+    const make = delegate => vision.ImageSegmenter.createFromOptions(files, {
+      baseOptions: { modelAssetPath: MP_MODEL, delegate },
+      runningMode: 'IMAGE', outputCategoryMask: true, outputConfidenceMasks: false,
+    });
+    try { return await make('GPU'); } catch { return await make('CPU'); }
+  })().catch(err => { segmenterJob = null; throw err; });
+  return segmenterJob;
+}
+
+async function cutoutByModel(img, limit = 560){
+  const seg = await getSegmenter();
+  const scale = Math.min(1, limit / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const cv = drawTo(img, 0, 0, img.naturalWidth, img.naturalHeight, w, h);
+
+  const result = seg.segment(cv);
+  const mask = result.categoryMask;
+  if (!mask) { result.close && result.close(); return null; }
+  const mw = mask.width, mh = mask.height;
+  const cats = mask.getAsUint8Array().slice();
+  result.close && result.close();
+
+  // 모델 판에 따라 사람이 0 인지 1 인지 다르다 (거꾸로 나와 사람이 지워진 적이 있다).
+  // 라벨을 믿지 않고, 테두리를 덜 덮는 쪽을 사람으로 본다.
+  const area = new Map(), edge = new Map();
+  for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
+    const v = cats[y * mw + x];
+    area.set(v, (area.get(v) || 0) + 1);
+    if (x === 0 || y === 0 || x === mw - 1 || y === mh - 1)
+      edge.set(v, (edge.get(v) || 0) + 1);
+  }
+  const edgeTotal = 2 * (mw + mh) - 4;
+  let person = null, leastEdge = Infinity;
+  for (const [v, n] of area) {
+    const share = n / cats.length;
+    // 거의 못 잡거나 화면을 다 차지하면 쓸 수 없는 마스크다
+    if (share < 0.05 || share > 0.92) continue;
+    const touch = (edge.get(v) || 0) / edgeTotal;
+    if (touch < leastEdge) { leastEdge = touch; person = v; }
+  }
+  if (person === null) return null;
+
+  const mcv = document.createElement('canvas');
+  mcv.width = mw; mcv.height = mh;
+  const mctx = mcv.getContext('2d');
+  const mid = mctx.createImageData(mw, mh);
+  for (let i = 0; i < cats.length; i++) {
+    mid.data[i * 4 + 3] = cats[i] === person ? 255 : 0;
+  }
+  mctx.putImageData(mid, 0, 0);
+
+  // 마스크를 원래 크기로 늘려 덮으면 경계가 부드럽게 깎인다
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(mcv, 0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+
+  return trimTransparent(cv);
+}
+
+// 투명한 테두리를 잘라낸다
+function trimTransparent(cv){
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+  let minX = cv.width, minY = cv.height, maxX = -1, maxY = -1;
+  for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) {
+    if (d[(y * cv.width + x) * 4 + 3] > 8) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) return cv;
+  const out = document.createElement('canvas');
+  out.width = maxX - minX + 1; out.height = maxY - minY + 1;
+  out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
 }
 
 /* ---------------------------------------------------------------- 상품 페이지 읽기 */
@@ -463,6 +576,7 @@ async function getLocalPhoto(file){
   const img = await loadImage(dataUrl, null);
   const pattern = analyzePattern(img);
   pattern.from = 'photo';
+
   return {
     url: '', referer: '', site: '내 사진',
     title: (file.name || '사진').replace(/\.[^.]+$/, '').slice(0, 60),
@@ -526,6 +640,27 @@ async function getProduct(raw){
   };
 }
 
+/* 올린 사진은 바로 누끼를 딴다. 단색 배경이면 즉시, 지저분하면 모델로.
+   배경을 지우고 나면 대표색도 그 결과에서 다시 뽑는다 (배경이 섞이면 색이 엉뚱해진다). */
+async function refinePhoto(item, onStep){
+  const img = await loadImage(item.source, null);
+  const flat = cutout(img);
+  let canvas = flat.removed ? flat.canvas : null;
+  let how = flat.removed ? 'plain' : 'none';
+
+  if (!canvas) {
+    try {
+      if (onStep) onStep('배경 지우는 중… 처음 한 번은 모델을 받아요');
+      const byModel = await cutoutByModel(img);
+      if (byModel) { canvas = byModel; how = 'model'; }
+    } catch (e) { /* 모델을 못 받으면 원본 그대로 */ }
+  }
+  if (!canvas) return { how: 'none' };
+
+  const colors = dominantColorsOfCanvas(canvas);
+  return { cut: canvas.toDataURL('image/png'), how, colors: colors || null };
+}
+
 async function getImageInfo(url, referer){
   const img = await loadImage(url, referer);
   const pattern = analyzePattern(img);
@@ -533,9 +668,19 @@ async function getImageInfo(url, referer){
   return { image: relayImg(url, referer), source: url, colors: dominantColors(img), pattern };
 }
 
-async function getCutout(url, referer){
-  const { canvas, removed } = cutout(await loadImage(url, referer));
-  return { image: canvas.toDataURL('image/png'), removed };
+async function getCutout(url, referer, onStep){
+  const img = await loadImage(url, referer);
+  const flat = cutout(img);
+  if (flat.removed) return { image: flat.canvas.toDataURL('image/png'), removed: true, how: 'plain' };
+
+  // 배경이 단색이 아니다 → 모델로 사람 실루엣을 딴다 (처음 한 번만 받아온다)
+  try {
+    if (onStep) onStep('배경 지우는 중… 처음 한 번은 모델을 받아요');
+    const byModel = await cutoutByModel(img);
+    if (byModel) return { image: byModel.toDataURL('image/png'), removed: true, how: 'model' };
+  } catch (e) { /* 모델을 못 받으면 원본으로 */ }
+
+  return { image: flat.canvas.toDataURL('image/png'), removed: false, how: 'none' };
 }
 
 /* ---------------------------------------------------------------- 지역 검색 */
@@ -711,5 +856,5 @@ async function getClimate(lat, lon, month, withForecast){
   return { climate, forecast };
 }
 
-window.coordi = { getProduct, getLocalPhoto, getImageInfo, getCutout,
+window.coordi = { getProduct, getLocalPhoto, refinePhoto, getImageInfo, getCutout,
                   searchPlaces, getClimate, thumb: relayImg };

@@ -283,6 +283,9 @@ $('#slots').innerHTML = ROLES.map(r => `
 document.querySelectorAll('[data-load]').forEach(b =>
   b.onclick = () => load(b.dataset.load));
 
+const CUT_LABEL = {plain:'단색 배경을 지웠어요', model:'모델로 사람만 분리했어요',
+                   none:'배경을 못 지웠어요 (사진이 복잡해요)'};
+
 /* 내 사진 올리기 — 자동 수집을 막는 쇼핑몰이나 앱에서만 보이는 상품은 이 길이 확실하다.
    버튼(휴대폰에서도 사진 앱이 열린다), 끌어다 놓기, 붙여넣기 세 가지를 받는다. */
 let lastSlot = 'top';
@@ -324,7 +327,19 @@ async function usePhoto(key, file){
     data.tag = autoTag(data.pattern);
     state[key] = data;
     $('#in-' + key).value = '';
-    st.textContent = '내 사진 · ' + data.title.slice(0, 22);
+    st.textContent = '내 사진 · 배경 지우는 중…';
+    render();                                    // 사진을 먼저 보여주고
+
+    const fine = await coordi.refinePhoto(data, msg => { st.textContent = msg; });
+    if (fine.cut) {
+      data.cut = fine.cut;
+      data.cutHow = fine.how;
+      data.cutDone = true;                       // 합성 모드에서 다시 하지 않는다
+      if (fine.colors) data.colors = fine.colors;
+      data.pick = 0;
+      delete data.manual;
+    }
+    st.textContent = '내 사진 · ' + (CUT_LABEL[fine.how] || '배경 그대로');
     render();
   } catch (e) {
     st.className = 'status err';
@@ -848,18 +863,35 @@ document.querySelectorAll('#fitmode button').forEach(b => b.onclick = () => {
   renderFit();
 });
 
+let cutNote = '';
+const showCutNote = () => {
+  const el = document.querySelector('#fit .cutnote');
+  if (el) el.textContent = cutNote;
+};
+
 async function ensureCutouts(){
   const jobs = ROLES.map(r => r.key).filter(k => state[k] && state[k].source && !state[k].cutDone);
   if (!jobs.length) return false;
+  cutNote = '배경 지우는 중…';
+  showCutNote();
   await Promise.all(jobs.map(async k => {
     const it = state[k];
     it.cutDone = true;                       // 실패해도 다시 시도하지 않는다
     try {
-      const r = await coordi.getCutout(it.source, it.referer);
-      if (r.image) { it.cut = r.image; it.cutBg = r.removed; }
+      const r = await coordi.getCutout(it.source, it.referer,
+        msg => { cutNote = msg; showCutNote(); });
+      if (r.image) { it.cut = r.image; it.cutBg = r.removed; it.cutHow = r.how; }
     } catch (e) { /* 원본 사진으로 그린다 */ }
   }));
+  cutNote = '';
   return true;
+}
+
+function cutSummary(){
+  const done = ['top','bottom'].filter(k => state[k] && state[k].cutDone);
+  if (!done.length) return '';
+  return done.map(k => (k === 'top' ? '상의' : '하의') + ' — '
+    + (CUT_LABEL[state[k].cutHow] || '배경 그대로')).join(' · ');
 }
 
 function renderFit(){
@@ -909,7 +941,9 @@ function renderFit(){
           <input type="range" min="-60" max="60" step="1" value="${c.x}" data-fit="${k}:x">`;
       }).join('')}
     </div>
-    <div class="status" style="margin-top:10px">배경을 지운 사진을 위아래로 겹쳐 봅니다. 슬라이더로 옷이 보이는 위치를 맞추세요.</div>`;
+    <div class="status cutnote" style="margin-top:10px">${cutNote}</div>
+    <div class="status" style="margin-top:2px">${cutSummary()
+      || '배경을 지운 사진을 위아래로 겹쳐 봅니다. 슬라이더로 옷이 보이는 위치를 맞추세요.'}</div>`;
 
   // 슬라이더는 다시 그리지 않고 CSS 변수만 바꿔 끊김 없이 움직이게 한다
   el.querySelectorAll('[data-fit]').forEach(inp => {
