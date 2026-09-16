@@ -20,7 +20,14 @@
   .layout{display:grid;grid-template-columns:400px 1fr;gap:24px;align-items:start}
   @media (max-width:900px){.layout{grid-template-columns:1fr}}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-  .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;font-weight:600}
+  .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 14px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .step{width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;
+    font-style:normal;font-size:11px;display:inline-flex;align-items:center;justify-content:center;
+    letter-spacing:0;flex:0 0 auto}
+  .hero{margin-bottom:16px}
+  .hero-grid{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:26px;align-items:start}
+  @media (max-width:900px){.hero-grid{grid-template-columns:1fr;gap:16px}}
 
   .slot{margin-bottom:14px}
   .slot label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
@@ -122,9 +129,13 @@
   .hits button:first-child{border-top:none}
   .hits button:hover{background:#f6f4f1;opacity:1}
   .hits button small{color:var(--muted);font-weight:400;margin-left:6px}
-  .clim{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .clim{margin:0}
+  @media (max-width:900px){.clim{padding-top:16px;border-top:1px solid var(--line)}}
   .clim .where{font-size:13px;font-weight:600;margin-bottom:8px}
-  .clim .temps{display:flex;align-items:baseline;gap:10px;margin-bottom:3px}
+  .clim .temps{display:flex;align-items:center;gap:14px;margin-bottom:5px}
+  .wx{display:block;flex:0 0 auto}
+  .wx-big{width:58px;height:58px}
+  .wx-day{width:26px;height:26px;margin:2px auto 0}
   .clim .big{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1}
   .clim .sub{font-size:12px;color:var(--muted)}
   .clim .band{font-size:14px;font-weight:700;margin:12px 0 5px}
@@ -134,6 +145,7 @@
   .fc{display:flex;gap:4px;margin-top:12px}
   .fc div{flex:1;text-align:center;font-size:10px;color:var(--muted);line-height:1.5}
   .fc div b{display:block;font-size:12px;color:var(--ink)}
+  .fc div{padding:6px 2px;border-radius:8px;background:#fbfaf9;border:1px solid var(--line)}
   .looks{display:flex;flex-wrap:wrap;gap:8px}
   .looks button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px}
 </style>
@@ -142,28 +154,32 @@
 <div class="wrap">
   <header>
     <h1>코디 체커</h1>
-    <p>상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려주고, 여행지 기온까지 맞춰 봐요.</p>
+    <p>먼저 여행지와 시기를 고르고, 상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려줘요.</p>
   </header>
 
-  <div class="layout">
-    <!-- 입력 -->
-    <div>
-      <div class="card" style="margin-bottom:16px">
-        <h2>상품 URL</h2>
-        <div id="slots"></div>
-      </div>
-
-      <div class="card" style="margin-bottom:16px">
-        <h2>여행지 · 시기</h2>
+  <div class="card hero">
+    <h2><i class="step">1</i> 어디로, 언제 가나요?</h2>
+    <div class="hero-grid">
+      <div>
         <div class="row">
-          <input type="text" id="place-q" placeholder="도시 이름 (예: 밴쿠버, 서울, 다낭)" autocomplete="off">
+          <input type="text" id="place-q" placeholder="나라나 도시 (예: 대한민국 경주, 밴쿠버)" autocomplete="off">
           <button id="place-go">검색</button>
         </div>
         <div class="status" id="place-st"></div>
         <div class="hits" id="hits" hidden></div>
         <div class="chips" id="chips"></div>
         <select id="month" style="margin-top:12px"></select>
-        <div id="climate"></div>
+      </div>
+      <div id="climate"><div class="empty">여행지를 고르면 그 달 기온과 옷차림 조언이 나와요.</div></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 입력 -->
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2><i class="step">2</i> 상품 URL</h2>
+        <div id="slots"></div>
       </div>
 
       <div class="card">
@@ -533,7 +549,11 @@ async function loadClimate(){
 }
 
 function renderClimate(){
-  if (!clim) { $('#climate').innerHTML = ''; return; }
+  if (!clim) {
+    $('#climate').innerHTML =
+      '<div class="empty">여행지를 고르면 그 달 기온과 옷차림 조언이 나와요.</div>';
+    return;
+  }
   const c = clim;
   const band = BANDS.find(b => c.tmean >= b.min);
   const notes = [band.wear];
@@ -563,15 +583,16 @@ function renderClimate(){
   const fc = c.forecast.length ? `
     <div class="fc">${c.forecast.map(d => `
       <div>${Number(d.date.slice(5,7))}/${Number(d.date.slice(8,10))}
+        ${icon(dayIcon(d), 'wx-day')}
         <b>${Math.round(d.max)}°</b>${Math.round(d.min)}°
-        ${d.rain != null && d.rain >= 40 ? '☂' : ''}
       </div>`).join('')}</div>
-    <div class="sub" style="margin-top:4px">위는 이번 주 실제 예보예요.</div>` : '';
+    <div class="sub" style="margin-top:6px">위는 이번 주 실제 예보예요.</div>` : '';
 
   $('#climate').innerHTML = `
     <div class="clim">
       <div class="where">${c.place.name} <span class="sub">· ${c.place.where || ''} · ${c.month}월</span></div>
       <div class="temps">
+        ${icon(monthIcon(c), 'wx-big')}
         <div class="big">${c.tmean}°</div>
         <div class="sub">낮 ${c.tmax}° / 밤 ${c.tmin}°<br>비 ${c.rain_days}일${c.snow_days ? ` · 눈 ${c.snow_days}일` : ''}</div>
       </div>
@@ -637,6 +658,74 @@ async function swapImage(key, u){
   } catch (e) {
     st.className = 'status err'; st.textContent = e.message;
   }
+}
+
+/* ---------------------------------------------------------------- 날씨 픽토그램 */
+const CLOUD = '<g fill="#b9c8d6"><circle cx="17" cy="21" r="7"/><circle cx="27" cy="19" r="9.5"/>' +
+  '<circle cx="35" cy="24" r="6"/><rect x="11" y="23" width="28" height="7.5" rx="3.75"/></g>';
+
+const ICONS = {
+  sun: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="24" cy="24" r="9" fill="#f2b234"/>
+    <g stroke="#f2b234" stroke-width="3.4" stroke-linecap="round">
+      <path d="M24 4.5v5M24 38.5v5M4.5 24h5M38.5 24h5M10.2 10.2l3.5 3.5M34.3 34.3l3.5 3.5M37.8 10.2l-3.5 3.5M13.7 34.3l-3.5 3.5"/>
+    </g></svg>`,
+
+  hot: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="24" cy="18" r="8" fill="#f08a2e"/>
+    <g stroke="#f08a2e" stroke-width="3.2" stroke-linecap="round">
+      <path d="M24 3v4M5 18h4M39 18h4M11.5 5.5l2.8 2.8M33.7 8.3l2.8-2.8"/>
+    </g>
+    <g stroke="#e4613c" stroke-width="3" stroke-linecap="round" fill="none">
+      <path d="M9 34c3-3 6 3 9 0s6 3 9 0 6 3 9 0"/>
+      <path d="M9 41c3-3 6 3 9 0s6 3 9 0 6 3 9 0"/>
+    </g></svg>`,
+
+  cloudSun: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="33" cy="15" r="7.5" fill="#f2b234"/>
+    <g stroke="#f2b234" stroke-width="2.8" stroke-linecap="round">
+      <path d="M33 3.5v3.4M43.8 15h3.2M40.9 7.1l-2.3 2.3M40.9 22.9l-2.3-2.3M25.5 15h-3.2"/>
+    </g>
+    <g transform="translate(-2 5)">${CLOUD}</g>
+    </svg>`,
+
+  rain: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    ${CLOUD}
+    <g stroke="#4a90d9" stroke-width="3.4" stroke-linecap="round">
+      <path d="M17 35l-2 7M25 35l-2 7M33 35l-2 7"/>
+    </g></svg>`,
+
+  snow: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    ${CLOUD}
+    <g fill="#79aed8"><circle cx="16" cy="38" r="2.6"/><circle cx="25" cy="41.5" r="2.6"/>
+      <circle cx="34" cy="38" r="2.6"/></g></svg>`,
+
+  cold: `<svg class="wx" viewBox="0 0 48 48" aria-hidden="true">
+    <g stroke="#5b9bd5" stroke-width="3.2" stroke-linecap="round" fill="none">
+      <path d="M24 5v38M7.5 14.5l33 19M40.5 14.5l-33 19"/>
+      <path d="M18 9.5l6 5 6-5M18 38.5l6-5 6 5M9 20.5l.5 7 6.5 1.5M39 20.5l-.5 7-6.5 1.5M9 27.5l-.5-7 6.5-1.5M39 27.5l.5-7-6.5-1.5"/>
+    </g></svg>`,
+};
+// 그 달의 날씨를 한 글자로 요약한 픽토그램
+function monthIcon(c){
+  if (c.snow_days >= 5) return 'snow';
+  if (c.tmean <= -10) return 'cold';
+  if (c.rain_days >= 13) return 'rain';
+  if (c.tmean >= 27) return 'hot';
+  if (c.rain_days >= 8) return 'cloudSun';
+  return 'sun';
+}
+
+function dayIcon(d){
+  if (d.rain != null && d.rain >= 50) return d.max <= 1 ? 'snow' : 'rain';
+  if (d.rain != null && d.rain >= 25) return 'cloudSun';
+  if (d.max != null && d.max >= 28) return 'hot';
+  if (d.max != null && d.max <= -8) return 'cold';
+  return 'sun';
+}
+
+function icon(name, cls){
+  return ICONS[name].replace('class="wx"', `class="wx ${cls}"`);
 }
 
 /* ---------------------------------------------------------------- 핏 뷰 */
