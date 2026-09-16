@@ -19,8 +19,13 @@ Worker 는 `worker/` 에 있고 `cd worker && npx wrangler deploy` 로 올린다
 
 ## 내 맥에서 돌리기 (선택)
 
-파이썬 서버로도 같은 기능이 돌아간다. 상품 페이지를 내 맥이 직접 가져오고
-사진도 내 컴퓨터에만 남는다. 안내: https://dlthwjd02-domi.github.io/coordi-checker/local.html
+**무신사·스마트스토어 주소를 그대로 쓰고 싶으면 이게 답이다.** 그 쇼핑몰들은 데이터센터 IP 를
+막으므로 워커로는 못 가져오지만(무신사는 `robots.txt` 로 명시), 내 맥에서 가져오면 평범한
+방문이라 그냥 된다.
+
+로컬 서버를 켜두면 **웹 화면이 자동으로 그쪽을 찾아 쓴다.** 화면 위에 "내 맥 연결됨" 이 뜨고,
+그때부터 무신사 주소도 그대로 들어간다. 안 켜져 있으면 워커로 돌아간다.
+안내: https://dlthwjd02-domi.github.io/coordi-checker/local.html
 
 1. [폴더 내려받기](https://github.com/dlthwjd02-domi/coordi-checker/archive/refs/heads/main.zip) 후 압축 풀기
 2. `start.command` 더블클릭 — 브라우저가 자동으로 열린다

@@ -4,11 +4,36 @@
  * 색 추출·패턴 판별·배경 제거는 전부 Canvas 로 여기서 한다.
  * 파이썬 서버(server.py)와 같은 결과가 나오도록 같은 값·같은 순서로 옮겼다. */
 
-const RELAY = 'https://coordi-fetch.domii.workers.dev';
+/* 가져오는 곳은 두 군데다.
+ *  - 워커: 아무 설치 없이 되지만, 무신사·스마트스토어는 데이터센터 IP 를 막는다
+ *  - 내 맥의 로컬 서버: 켜져 있으면 내 IP 로 가져오므로 그 사이트들도 그냥 된다
+ * 켜져 있으면 자동으로 로컬을 쓴다. */
+const WORKER_RELAY = 'https://coordi-fetch.domii.workers.dev';
+const LOCAL_RELAY = 'http://127.0.0.1:8787/api';
+let relayBase = WORKER_RELAY;
+let localCheck = null;
+
+function checkLocal(){
+  if (localCheck) return localCheck;
+  localCheck = (async () => {
+    try {
+      const stop = new AbortController();
+      const timer = setTimeout(() => stop.abort(), 900);
+      const res = await fetch(`${LOCAL_RELAY}/health`, { signal: stop.signal });
+      clearTimeout(timer);
+      if (res.ok && (await res.json()).relay) { relayBase = LOCAL_RELAY; return true; }
+    } catch (e) { /* 안 켜져 있으면 워커로 */ }
+    return false;
+  })();
+  return localCheck;
+}
+
+const usingLocal = () => relayBase === LOCAL_RELAY;
 
 /* ---------------------------------------------------------------- 가져오기 */
 async function relayPage(url){
-  const res = await fetch(`${RELAY}/page?u=${encodeURIComponent(url)}`);
+  await checkLocal();
+  const res = await fetch(`${relayBase}/page?u=${encodeURIComponent(url)}`);
   const type = res.headers.get('Content-Type') || '';
   if (type.includes('application/json')) {
     const body = await res.json().catch(() => ({}));
@@ -19,7 +44,7 @@ async function relayPage(url){
 }
 
 const relayImg = (url, referer) =>
-  `${RELAY}/img?u=${encodeURIComponent(url)}` + (referer ? `&r=${encodeURIComponent(referer)}` : '');
+  `${relayBase}/img?u=${encodeURIComponent(url)}` + (referer ? `&r=${encodeURIComponent(referer)}` : '');
 
 function loadImage(url, referer){
   return new Promise((ok, fail) => {
@@ -610,6 +635,7 @@ const POLICY_BLOCKED = [
 ];
 
 function policyNote(url){
+  if (usingLocal()) return null;             // 내 맥으로 가져오면 막히지 않는다
   let host;
   try { host = new URL(url).hostname; } catch { return null; }
   const hit = POLICY_BLOCKED.find(([re]) => re.test(host));
@@ -621,6 +647,7 @@ async function getProduct(raw){
   if (!url) throw new Error('주소 형식이 이상해요. https:// 로 시작하는 상품 주소를 넣어 주세요.');
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   url = unwrapDeeplink(url);
+  await checkLocal();
 
   // 이미지 주소를 직접 넣은 경우
   if (IMG_EXT.test(url)) {
@@ -894,4 +921,5 @@ async function getClimate(lat, lon, month, withForecast){
 }
 
 window.coordi = { getProduct, getLocalPhoto, refinePhoto, getImageInfo, getCutout,
-                  searchPlaces, getClimate, thumb: relayImg };
+                  searchPlaces, getClimate, thumb: relayImg,
+                  checkLocal, usingLocal };

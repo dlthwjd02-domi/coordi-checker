@@ -1007,9 +1007,39 @@ def trim_cache(limit=600, keep=400):
         pass
 
 
+# 웹 화면(GitHub Pages)이 이 서버를 통해 가져올 수 있게 허용한다.
+# 쇼핑몰 차단은 IP 기준이라, 내 맥에서 가져오면 무신사 같은 곳도 그냥 된다.
+WEB_ORIGINS = ("https://dlthwjd02-domi.github.io", "http://localhost:8787",
+               "http://127.0.0.1:8787", "http://localhost:8080", "http://127.0.0.1:8080")
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
+
+    def _allow_origin(self):
+        origin = self.headers.get("Origin")
+        return origin if origin in WEB_ORIGINS else None
+
+    def _relay(self, target, referer, as_image):
+        """웹 화면 대신 이 맥이 가져온다 (워커는 쇼핑몰 IP 차단에 걸린다)."""
+        if not re.match(r"^https?://", target or ""):
+            raise RuntimeError("가져올 주소가 올바르지 않아요.")
+        raw = grab(target, referer or None)
+        blob = raw if as_image else None
+        origin = self._allow_origin()
+        self.send_response(200)
+        if as_image:
+            self.send_header("Content-Type", "image/png" if raw[:4] == b"\x89PNG" else "image/jpeg")
+        else:
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Expose-Headers", "X-Final-Url")
+        self.send_header("X-Final-Url", target)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -1019,6 +1049,12 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 if parsed.path == "/api/places":
                     return self._json(200, {"results": search_places(one("q"))})
+                if parsed.path == "/api/health":
+                    return self._json(200, {"ok": True, "relay": True, "service": "coordi-local"})
+                if parsed.path == "/api/page":
+                    return self._relay(one("u"), None, False)
+                if parsed.path == "/api/img":
+                    return self._relay(one("u"), one("r"), True)
                 if parsed.path == "/api/thumb":
                     raw = grab(one("u"), one("r") or None)
                     _, path = store(raw, one("u"), maxpx=260, prefix="t_")
@@ -1093,6 +1129,9 @@ class Handler(SimpleHTTPRequestHandler):
     def _json(self, code, obj):
         payload = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
+        origin = self._allow_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()

@@ -23,6 +23,8 @@
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
   .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
     margin:0 0 14px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .badge{display:inline-flex;align-items:center;gap:5px;background:#e6f0ea;color:var(--good);
+    border:1px solid #c5ddd0;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600}
   .step{width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;
     font-style:normal;font-size:11px;display:inline-flex;align-items:center;justify-content:center;
     letter-spacing:0;flex:0 0 auto}
@@ -194,9 +196,7 @@
   <header>
     <h1>코디 체커</h1>
     <p>먼저 여행지와 시기를 고르고, 상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려줘요.</p>
-    <p class="sub" style="margin-top:6px">설치 없이 이 화면에서 바로 돌아갑니다. 주소가 막히는 쇼핑몰은
-      <b>사진</b> 버튼으로 올리면 돼요 ·
-      <a href="local.html" style="color:inherit">내 맥에서 돌리기</a></p>
+    <p class="sub" id="relay-note" style="margin-top:6px">설치 없이 이 화면에서 바로 돌아갑니다.</p>
   </header>
 
   <div class="card hero">
@@ -1109,6 +1109,15 @@ $('#reset').onclick = () => {
   picking = null;
   render();
 };
+
+/* 내 맥의 로컬 서버가 켜져 있으면 그쪽으로 가져온다 (무신사 등 차단 사이트도 주소로 됨) */
+coordi.checkLocal().then(ok => {
+  $('#relay-note').innerHTML = ok
+    ? '<span class="badge">내 맥 연결됨</span> 무신사·스마트스토어도 주소로 됩니다 · '
+      + '<a href="local.html" style="color:inherit">이게 뭔가요?</a>'
+    : '설치 없이 이 화면에서 바로 돌아갑니다. 무신사·스마트스토어는 <b>사진</b> 버튼으로 올리거나, '
+      + '<a href="local.html" style="color:inherit">내 맥에서 돌리면</a> 주소로도 돼요.';
+});
 
 renderLooks();
 render();
