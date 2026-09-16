@@ -432,6 +432,15 @@ def pick_price(metas, html):
     return raw if raw and float(raw or 0) > 0 else ""
 
 
+def pick_currency(metas, html):
+    """해외 사이트 가격을 원화로 잘못 적지 않으려면 통화를 같이 봐야 한다."""
+    for k in ("product:price:currency", "og:price:currency", "pricecurrency"):
+        if metas.get(k):
+            return metas[k].strip().upper()[:3]
+    m = re.search(r'"priceCurrency"\s*:\s*"([A-Za-z]{3})"', html)
+    return m.group(1).upper() if m else ""
+
+
 def decode(res):
     """서버가 charset을 안 주면 requests가 latin-1로 잘못 읽어서 한글이 깨진다."""
     charset = None
@@ -630,6 +639,15 @@ def pick_price(metas, html):
         raw = m.group(1) if m else ""
     raw = re.sub(r"[^0-9.]", "", raw).rstrip(".")
     return raw if raw and float(raw or 0) > 0 else ""
+
+
+def pick_currency(metas, html):
+    """해외 사이트 가격을 원화로 잘못 적지 않으려면 통화를 같이 봐야 한다."""
+    for k in ("product:price:currency", "og:price:currency", "pricecurrency"):
+        if metas.get(k):
+            return metas[k].strip().upper()[:3]
+    m = re.search(r'"priceCurrency"\s*:\s*"([A-Za-z]{3})"', html)
+    return m.group(1).upper() if m else ""
 
 
 def decode(res):
@@ -864,7 +882,7 @@ def fetch_product(url):
 
     candidates, every, referer = [], [], None
     if ctype.startswith("image/"):
-        img_url, title, price = res.url, os.path.basename(urlparse(res.url).path), ""
+        img_url, title, price, currency = res.url, os.path.basename(urlparse(res.url).path), "", ""
         raw = res.content
     else:
         res.raise_for_status()
@@ -873,6 +891,7 @@ def fetch_product(url):
         img_url = pick_image(metas, html, res.url)
         title = pick_title(metas, html)
         price = pick_price(metas, html)
+        currency = pick_currency(metas, html)
         referer = res.url
         every = collect_images(html, res.url)
         urls = [e["url"] for e in every]
@@ -899,6 +918,7 @@ def fetch_product(url):
         "site": urlparse(url).netloc.replace("www.", ""),
         "title": title[:120],
         "price": price,
+        "currency": currency,
         "image": "/cache/" + name,
         "source": img_url,
         "colors": colors,
@@ -907,6 +927,46 @@ def fetch_product(url):
         "candidates": candidates,
         "all_candidates": [e["url"] for e in every],
     }
+
+
+def friendly_error(exc):
+    """requests 스택트레이스를 그대로 보여주면 읽을 수 없어서 한국어로 바꿔준다."""
+    if isinstance(exc, RuntimeError):
+        return str(exc)
+    if isinstance(exc, requests.exceptions.Timeout):
+        return "사이트가 응답하지 않아요. 잠시 뒤 다시 해보세요."
+    if isinstance(exc, requests.exceptions.HTTPError):
+        code = exc.response.status_code if exc.response is not None else 0
+        if code in (401, 403, 405, 429):
+            return (f"이 사이트가 자동 수집을 막고 있어요 ({code}). "
+                    "상품 이미지 주소를 직접 넣거나 색을 직접 지정해 주세요.")
+        if code == 404:
+            return "그 주소에는 상품이 없어요 (404). 주소를 다시 확인해 주세요."
+        return f"사이트가 오류를 냈어요 ({code})."
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return "주소를 못 찾았어요. 사이트 주소가 맞는지 확인해 주세요."
+    text = str(exc)
+    if "Invalid URL" in text or "No host supplied" in text:
+        return "주소 형식이 이상해요. https:// 로 시작하는 상품 주소를 넣어 주세요."
+    if isinstance(exc, (ValueError, TypeError)):
+        return "입력값이 올바르지 않아요."
+    return "불러오지 못했어요. 상품 이미지 주소를 직접 넣어 보세요."
+
+
+def trim_cache(limit=600, keep=400):
+    """개인용이라 캐시를 안 지우면 계속 쌓인다. 오래된 이미지부터 정리한다."""
+    try:
+        files = [os.path.join(CACHE, f) for f in os.listdir(CACHE) if f.endswith((".png", ".meta"))]
+        if len(files) <= limit:
+            return
+        files.sort(key=lambda f: os.path.getmtime(f))
+        for f in files[:len(files) - keep]:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -958,8 +1018,15 @@ class Handler(SimpleHTTPRequestHandler):
                         "pattern": found,
                     })
                 if parsed.path == "/api/climate":
-                    lat, lon = float(one("lat")), float(one("lon"))
-                    month = int(one("month") or dt.date.today().month)
+                    try:
+                        lat, lon = float(one("lat")), float(one("lon"))
+                        month = int(one("month") or dt.date.today().month)
+                    except ValueError:
+                        raise RuntimeError("여행지를 다시 골라 주세요.")
+                    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                        raise RuntimeError("좌표 범위를 벗어났어요.")
+                    if not 1 <= month <= 12:
+                        raise RuntimeError("월은 1~12 사이여야 해요.")
                     payload = {"climate": climate(lat, lon, month)}
                     if one("forecast") == "1":
                         try:
@@ -968,7 +1035,7 @@ class Handler(SimpleHTTPRequestHandler):
                             payload["forecast"] = []
                     return self._json(200, payload)
             except Exception as exc:
-                return self._json(200, {"error": str(exc) or exc.__class__.__name__})
+                return self._json(200, {"error": friendly_error(exc)})
             return self.send_error(404)
         if parsed.path in ("/", "/index.html"):
             self.path = "/static/index.html"
@@ -982,8 +1049,8 @@ class Handler(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
             data = fetch_product((body.get("url") or "").strip())
             self._json(200, data)
-        except Exception as exc:  # 사용자에게 그대로 보여준다
-            self._json(200, {"error": str(exc) or exc.__class__.__name__})
+        except Exception as exc:
+            self._json(200, {"error": friendly_error(exc)})
 
     def _json(self, code, obj):
         payload = json.dumps(obj, ensure_ascii=False).encode()
@@ -999,5 +1066,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    trim_cache()
     print(f"\n  코디 체커 → http://localhost:{PORT}\n  (끄려면 Ctrl+C)\n")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

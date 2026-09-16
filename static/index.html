@@ -48,8 +48,10 @@
 
   /* 코디 보드 */
   .board{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
-  .item{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;position:relative}
-  .item .ph{aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;
+  .side figure{min-width:0}
+  .item{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;
+    position:relative;min-width:0}
+  .item .ph{min-height:132px;display:flex;align-items:center;justify-content:center;
     background:repeating-linear-gradient(45deg,#f2efeb,#f2efeb 8px,#eae6e0 8px,#eae6e0 16px);
     color:var(--muted);font-size:12px;text-align:center;padding:12px}
   .item img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#fff}
@@ -83,7 +85,8 @@
   .segs button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:12px;padding:7px 14px}
   .segs button.on{background:var(--ink);color:#fff}
   .tags{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-  .tags button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:10px;padding:4px 6px;font-weight:500}
+  .tags button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:11px;
+    padding:6px 7px;font-weight:500}
   .tags button.on{background:var(--ink);color:#fff}
 
   .side{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
@@ -101,10 +104,37 @@
     transform:translateX(calc(-50% + var(--x))) translateY(var(--y)) scale(var(--s));
     transform-origin:top center}
   .win.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
-  .fitctl{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:8px 10px;
+  /* 한 줄에 둘씩 놓으면 "상의 좌우 / 하의 크기" 처럼 섞여서 헷갈린다 */
+  .fitctl{display:grid;grid-template-columns:auto 1fr;gap:9px 12px;
     align-items:center;margin-top:16px;font-size:12px;color:var(--muted)}
   .fitctl b{color:var(--ink);font-size:12px}
   input[type=range]{width:100%;accent-color:#1b1a18}
+
+  /* 손가락으로 누르는 기기는 화면 폭과 별개로 버튼을 키운다 */
+  @media (pointer:coarse){
+    .mini{font-size:11px;padding:8px 10px}
+    .tags button{font-size:11px;padding:9px 8px}
+    input[type=color]{width:36px;height:34px}
+    .item .x{width:32px;height:32px;line-height:32px;font-size:16px}
+    .look button,.look .lx{padding:9px 11px}
+    .segs button{padding:9px 16px}
+  }
+
+  /* 좁은 화면 — 카드가 1열로 떨어지지 않게, 손으로 누를 수 있게 */
+  @media (max-width:560px){
+    .board{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .side figure{flex:1 1 calc(50% - 7px)}
+    .side img{max-height:260px}
+    .item .name{font-size:11px}
+    .item .tools{flex-wrap:wrap;gap:6px}
+    .mini{font-size:11px;padding:7px 9px}
+    .tags button{font-size:11px;padding:9px 8px}
+    input[type=color]{width:34px;height:32px}
+    .item .x{width:30px;height:30px;line-height:30px;font-size:16px}
+    .fc div{font-size:11px}
+    .fc div b{font-size:13px}
+    .picker{grid-template-columns:repeat(auto-fill,minmax(68px,1fr))}
+  }
 
   /* 결과 */
   .verdict{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
@@ -143,10 +173,15 @@
   .clim .advice p{margin:0 0 6px}
   .clim .advice p:last-child{margin:0}
   .fc{display:flex;gap:4px;margin-top:12px}
-  .fc div{flex:1;text-align:center;font-size:10px;color:var(--muted);line-height:1.5}
+  .fc div{flex:1;text-align:center;font-size:11px;color:var(--muted);line-height:1.5}
   .fc div b{display:block;font-size:12px;color:var(--ink)}
   .fc div{padding:6px 2px;border-radius:8px;background:#fbfaf9;border:1px solid var(--line)}
   .looks{display:flex;flex-wrap:wrap;gap:8px}
+  .look{display:inline-flex}
+  .look button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px;
+    border-radius:8px 0 0 8px;padding:7px 10px}
+  .look .lx{border-left:none;border-radius:0 8px 8px 0;padding:7px 9px;color:var(--muted)}
+  .look .lx:hover{color:var(--bad)}
   .looks button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px}
 </style>
 </head>
@@ -242,6 +277,20 @@ ROLES.forEach(r => $('#in-'+r.key).addEventListener('keydown', e => {
   if (e.key === 'Enter') load(r.key);
 }));
 
+const CURRENCY = {KRW:'원', USD:'$', EUR:'€', JPY:'¥', CNY:'¥', GBP:'£',
+                  CAD:'C$', AUD:'A$', THB:'฿', VND:'₫', SGD:'S$', HKD:'HK$'};
+
+// 해외 사이트 가격을 원으로 적으면 안 된다. 통화를 모르면 단위를 안 붙인다.
+function priceText(d){
+  const n = Number(String(d.price || '').replace(/[^0-9.]/g, ''));
+  if (!n) return '';
+  const cur = (d.currency || '').toUpperCase();
+  if (cur === 'KRW') return n.toLocaleString() + '원';
+  if (!cur) return n.toLocaleString();
+  const sym = CURRENCY[cur];
+  return sym ? sym + n.toLocaleString() : n.toLocaleString() + ' ' + cur;
+}
+
 // 색상 칩에서 본 줄무늬만 자동으로 찍어준다.
 // 모델컷은 피부·배경·그림자 때문에 줄무늬 신호가 묻혀서 믿을 수 없다.
 function autoTag(pattern){
@@ -250,8 +299,10 @@ function autoTag(pattern){
 
 async function load(key){
   const input = $('#in-'+key), st = $('#st-'+key);
+  const btn = document.querySelector(`[data-load="${key}"]`);
   const url = input.value.trim();
-  if (!url) return;
+  if (!url || (btn && btn.disabled)) return;      // 연타로 두 번 불러오는 것 방지
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
   st.className = 'status'; st.textContent = '불러오는 중…';
   try {
     const res = await fetch('/api/product', {
@@ -263,11 +314,14 @@ async function load(key){
     data.pick = 0;
     data.tag = autoTag(data.pattern);
     state[key] = data;
-    st.textContent = data.site + (data.price ? ' · ' + Number(data.price.replace(/[^0-9.]/g,'')).toLocaleString() + '원' : '');
+    const money = priceText(data);
+    st.textContent = data.site + (money ? ' · ' + money : '');
     render();
   } catch (e) {
     st.className = 'status err';
     st.textContent = e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '불러오기'; }
   }
 }
 
@@ -324,7 +378,11 @@ function hueGap(a,b){ const d = Math.abs(a-b) % 360; return Math.min(d, 360-d); 
 function colorName(c){
   if (c.l < 14) return '블랙';
   if (c.l > 90) return '화이트';
-  if (c.s < 16) return c.l > 60 ? '라이트 그레이' : '차콜/그레이';
+  if (c.s < 16) {
+    // 데님처럼 채도가 낮아도 파랑기가 뚜렷하면 네이비로 부른다
+    if (c.s >= 8 && c.h >= 195 && c.h <= 265 && c.l < 45) return '네이비';
+    return c.l > 60 ? '라이트 그레이' : '차콜/그레이';
+  }
   const h = c.h, tone = c.l < 35 ? '딥 ' : c.l > 70 ? '라이트 ' : '';
   const names = [[15,'레드'],[45,'오렌지/베이지'],[70,'옐로'],[160,'그린'],[200,'틸'],[255,'블루'],[290,'퍼플'],[335,'핑크'],[360,'레드']];
   return tone + names.find(n => h <= n[0])[1];
@@ -730,7 +788,8 @@ function icon(name, cls){
 
 /* ---------------------------------------------------------------- 핏 뷰 */
 let fitMode = 'side';
-const fitCtl = {top:{s:1.6, y:-12, x:0}, bottom:{s:1.6, y:-52, x:0}};
+// scale 이 먼저 먹어서 -52% 로는 모델 상체가 보였다. 다리가 보이는 값으로 맞췄다.
+const fitCtl = {top:{s:1.6, y:-14, x:0}, bottom:{s:1.6, y:-88, x:0}};
 
 document.querySelectorAll('#fitmode button').forEach(b => b.onclick = () => {
   fitMode = b.dataset.mode;
@@ -897,29 +956,73 @@ function render(){
 /* ---------------------------------------------------------------- 저장 */
 const KEY = 'coordi-looks';
 const readLooks = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+
+function writeLooks(looks){
+  try {
+    localStorage.setItem(KEY, JSON.stringify(looks));
+    return true;
+  } catch (e) {
+    alert('저장 공간이 부족해요. 저장한 코디를 몇 개 지우고 다시 해보세요.');
+    return false;
+  }
+}
+
 function renderLooks(){
   const looks = readLooks();
   $('#looks').innerHTML = looks.length
-    ? looks.map((l,i) => `<button data-look="${i}">${l.name}</button>`).join('')
+    ? looks.map((l,i) => `<span class="look">
+        <button data-look="${i}">${l.name}</button>
+        <button class="lx" data-delook="${i}" title="이 코디 지우기">×</button>
+      </span>`).join('')
     : '<span class="status">저장한 코디가 없어요.</span>';
+
   document.querySelectorAll('[data-look]').forEach(b => b.onclick = () => {
     const l = readLooks()[b.dataset.look];
+    if (!l) return;
     Object.keys(state).forEach(k => delete state[k]);
     Object.assign(state, l.state);
     ROLES.forEach(r => { $('#in-'+r.key).value = state[r.key]?.url || ''; });
-    render();
+    if (l.place) {                                  // 여행지·월도 같이 되살린다
+      place = l.place;
+      if (l.month) $('#month').value = l.month;
+      document.querySelectorAll('[data-chip]').forEach(c =>
+        c.classList.toggle('on', PLACES[c.dataset.chip].name === place.name));
+      loadClimate();
+    } else {
+      render();
+    }
+  });
+
+  document.querySelectorAll('[data-delook]').forEach(b => b.onclick = () => {
+    const looks = readLooks();
+    looks.splice(Number(b.dataset.delook), 1);
+    writeLooks(looks);
+    renderLooks();
   });
 }
+
 $('#save').onclick = () => {
   if (!state.top || !state.bottom) return alert('상의와 하의를 먼저 넣어 주세요.');
   const looks = readLooks();
-  looks.push({name: '코디 ' + (looks.length + 1), state: JSON.parse(JSON.stringify(state))});
-  try { localStorage.setItem(KEY, JSON.stringify(looks)); } catch {}
-  renderLooks();
+  // all_candidates 는 80장씩이라 그대로 저장하면 브라우저 저장 공간을 금방 먹는다
+  const slim = {};
+  for (const [k, v] of Object.entries(state)) {
+    const copy = {...v};
+    delete copy.all_candidates;
+    delete copy.cut;
+    delete copy.cutDone;
+    slim[k] = copy;
+  }
+  const label = (place ? place.name + ' ' : '') + $('#month').value + '월 코디';
+  looks.push({name: label, state: JSON.parse(JSON.stringify(slim)),
+              place: place, month: Number($('#month').value)});
+  if (writeLooks(looks)) renderLooks();
 };
+
 $('#reset').onclick = () => {
   Object.keys(state).forEach(k => delete state[k]);
   ROLES.forEach(r => { $('#in-'+r.key).value = ''; $('#st-'+r.key).textContent = ''; });
+  picking = null;
   render();
 };
 
