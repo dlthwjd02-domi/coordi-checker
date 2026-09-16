@@ -319,17 +319,23 @@ def decode(res):
 
 
 # ---------------------------------------------------------------- 색 추출
-def dominant_colors(raw, n=5):
+def open_rgb(raw):
     img = Image.open(io.BytesIO(raw))
     if img.mode in ("RGBA", "LA", "P"):
         img = img.convert("RGBA")
         bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
         img = Image.alpha_composite(bg, img)
-    img = img.convert("RGB")
+    return img.convert("RGB")
 
+
+def crop_center(img):
+    """배경·워터마크를 피하려고 가운데 위주로 자른다."""
     w, h = img.size
-    # 배경·워터마크를 피하려고 가운데 위주로 자른다
-    img = img.crop((int(w * 0.18), int(h * 0.12), int(w * 0.82), int(h * 0.92)))
+    return img.crop((int(w * 0.18), int(h * 0.12), int(w * 0.82), int(h * 0.92)))
+
+
+def dominant_colors(raw, n=5):
+    img = crop_center(open_rgb(raw))
     img.thumbnail((140, 140))
     px = list(img.getdata())
 
@@ -406,6 +412,99 @@ def annotate_colors(urls, referer, gap=14):
     return kept
 
 
+# ---------------------------------------------------------------- 패턴 판별
+def analyze_pattern(raw):
+    """무지 / 스트라이프 / 그래픽 / 올오버 패턴을 구분한다.
+
+    스트라이프는 한 축으로는 밝기가 크게 오르내리는데 그 축과 직각인 줄 안에서는
+    밝기가 거의 일정하다는 성질을 쓴다. 프린트는 상위 색 비중이 낮은 걸로 잡는다.
+    """
+    img = crop_center(open_rgb(raw))
+    gray = img.convert("L").resize((96, 96))
+    px = list(gray.getdata())
+    rows = [px[i * 96:(i + 1) * 96] for i in range(96)]
+    cols = [[rows[r][c] for r in range(96)] for c in range(96)]
+
+    def line_ratio(lines):
+        means = [statistics.mean(l) for l in lines]
+        within = statistics.mean(statistics.pvariance(l) for l in lines)
+        return statistics.pvariance(means) / (within + 1)
+
+    ratio_h = line_ratio(rows)          # 가로줄무늬
+    ratio_v = line_ratio(cols)          # 세로줄무늬
+
+    quant = img.resize((96, 96)).quantize(colors=6, method=Image.Quantize.MEDIANCUT)
+    counts = sorted((c for c, _ in (quant.getcolors() or [(1, 0)])), reverse=True)
+    total = sum(counts) or 1
+    top1 = counts[0] / total
+    big = sum(1 for c in counts if c / total >= 0.12)
+
+    stripe = max(ratio_h, ratio_v)
+    if stripe >= 2.0 and top1 < 0.8:
+        kind = "stripe"
+        axis = "h" if ratio_h >= ratio_v else "v"
+    elif top1 < 0.5 or big >= 4:
+        kind, axis = "print", None
+    elif top1 < 0.78:
+        kind, axis = "graphic", None
+    else:
+        kind, axis = "solid", None
+
+    return {"kind": kind, "axis": axis, "top1": round(top1, 2),
+            "colors": big, "stripe": round(stripe, 2)}
+
+
+# ---------------------------------------------------------------- 배경 제거 (컷아웃)
+def cutout(raw, tol=26, limit=560):
+    """스튜디오 단색 배경을 테두리에서부터 지워 투명 PNG로 만든다.
+    배경이 단색이 아니면 손대지 않고 원본을 돌려준다."""
+    img = open_rgb(raw)
+    img.thumbnail((limit, limit))
+    w, h = img.size
+    px = img.load()
+
+    edge = [px[x, 0] for x in range(0, w, 4)] + [px[x, h - 1] for x in range(0, w, 4)] \
+         + [px[0, y] for y in range(0, h, 4)] + [px[w - 1, y] for y in range(0, h, 4)]
+
+    # 모델 발이나 옷이 화면 끝에 닿는 경우가 많아 평균이 아니라 최빈색을 배경으로 본다.
+    # 버킷만으로는 같은 회색이 경계에서 쪼개지므로, 씨드를 잡고 허용범위로 다시 모은다.
+    buckets = {}
+    for c in edge:
+        buckets.setdefault(tuple(v // 32 for v in c), []).append(c)
+    seed = max(buckets.values(), key=len)
+    base = tuple(round(statistics.mean(c[i] for c in seed)) for i in range(3))
+    same = [c for c in edge if max(abs(c[i] - base[i]) for i in range(3)) <= tol]
+    if len(same) / len(edge) < 0.55:     # 테두리가 한 색으로 안 모인다 = 배경 있는 사진
+        return img, False
+    base = tuple(round(statistics.mean(c[i] for c in same)) for i in range(3))
+
+    def near(c):
+        return all(abs(c[i] - base[i]) <= tol for i in range(3))
+
+    # 테두리에서 시작해 배경색으로 이어진 영역만 지운다 (옷 안쪽 흰색은 남는다)
+    mask = bytearray(w * h)
+    stack = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)] \
+          + [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+    while stack:
+        x, y = stack.pop()
+        i = y * w + x
+        if mask[i] or not near(px[x, y]):
+            continue
+        mask[i] = 1
+        if x > 0:     stack.append((x - 1, y))
+        if x < w - 1: stack.append((x + 1, y))
+        if y > 0:     stack.append((x, y - 1))
+        if y < h - 1: stack.append((x, y + 1))
+
+    out = img.convert("RGBA")
+    alpha = Image.frombytes("L", (w, h), bytes(255 - m * 255 for m in mask))
+    out.putalpha(alpha)
+    box = out.getbbox()
+    if box:
+        out = out.crop(box)
+    return out, True
+
+
 # ---------------------------------------------------------------- 요청 처리
 def fetch_product(url):
     if not re.match(r"^https?://", url):
@@ -445,6 +544,7 @@ def fetch_product(url):
         "image": "/cache/" + name,
         "source": img_url,
         "colors": dominant_colors(raw),
+        "pattern": analyze_pattern(raw),
         "candidates": candidates,
         "all_candidates": [e["url"] for e in every],
     }
@@ -474,6 +574,18 @@ class Handler(SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(blob)
                     return
+                if parsed.path == "/api/cutout":
+                    src = one("u")
+                    name = "c_" + hashlib.sha1(src.encode()).hexdigest()[:16] + ".png"
+                    path = os.path.join(CACHE, name)
+                    if not os.path.exists(path):
+                        img, removed = cutout(grab(src, one("r") or None))
+                        img.save(path, "PNG")
+                        with open(path + ".meta", "w") as f:
+                            f.write("1" if removed else "0")
+                    with open(path + ".meta") as f:
+                        removed = f.read() == "1"
+                    return self._json(200, {"image": "/cache/" + name, "removed": removed})
                 if parsed.path == "/api/image":
                     raw = grab(one("u"), one("r") or None)
                     name, _ = store(raw, one("u"))
@@ -481,6 +593,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "image": "/cache/" + name,
                         "source": one("u"),
                         "colors": dominant_colors(raw),
+                        "pattern": analyze_pattern(raw),
                     })
                 if parsed.path == "/api/climate":
                     lat, lon = float(one("lat")), float(one("lon"))

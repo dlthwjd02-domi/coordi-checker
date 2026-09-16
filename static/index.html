@@ -72,6 +72,32 @@
   .cand img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff}
   .cand i{display:block;height:9px}
 
+  .segs{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:14px}
+  .segs button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:12px;padding:7px 14px}
+  .segs button.on{background:var(--ink);color:#fff}
+  .tags{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .tags button{background:#fff;color:var(--muted);border:none;border-radius:0;font-size:10px;padding:4px 6px;font-weight:500}
+  .tags button.on{background:var(--ink);color:#fff}
+
+  .side{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .side figure{margin:0;flex:1 1 180px;min-width:150px}
+  .side img{width:100%;max-height:340px;object-fit:contain;background:#fff;
+    border:1px solid var(--line);border-radius:10px;display:block}
+  .side .bar2{display:flex;height:14px;margin-top:6px;border-radius:4px;overflow:hidden}
+  .side .bar2 i{display:block}
+  .side figcaption{font-size:11px;color:var(--muted);margin-top:5px}
+
+  .stage{position:relative;width:300px;height:520px;margin:0 auto;border-radius:12px;
+    overflow:hidden;background:linear-gradient(#efece7,#e5e1db);border:1px solid var(--line)}
+  .win{position:absolute;left:0;right:0;overflow:hidden}
+  .win img{position:absolute;left:50%;top:0;width:100%;
+    transform:translateX(-50%) translateY(var(--y)) scale(var(--s));transform-origin:top center}
+  .win.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+  .fitctl{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:8px 10px;
+    align-items:center;margin-top:16px;font-size:12px;color:var(--muted)}
+  .fitctl b{color:var(--ink);font-size:12px}
+  input[type=range]{width:100%;accent-color:#1b1a18}
+
   /* 결과 */
   .verdict{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
   .score{font-size:44px;font-weight:700;letter-spacing:-2px;line-height:1}
@@ -156,6 +182,14 @@
         <div class="board" id="board"></div>
         <div id="picker"></div>
       </div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>핏 뷰</h2>
+        <div class="segs" id="fitmode">
+          <button data-mode="side" class="on">나란히</button>
+          <button data-mode="stack">합성</button>
+        </div>
+        <div id="fit"></div>
+      </div>
       <div class="card">
         <h2>어울림 진단</h2>
         <div id="result"><div class="empty">상의와 하의를 넣으면 진단이 나와요.</div></div>
@@ -204,6 +238,9 @@ async function load(key){
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     data.pick = 0;
+    // 줄무늬 신호가 뚜렷할 때만 자동으로 찍어주고, 나머지는 사용자가 정한다
+    data.tag = (data.pattern && data.pattern.kind === 'stripe' && data.pattern.stripe >= 2.5)
+      ? 'stripe' : 'solid';
     state[key] = data;
     st.textContent = data.site + (data.price ? ' · ' + Number(data.price.replace(/[^0-9.]/g,'')).toLocaleString() + '원' : '');
     render();
@@ -233,6 +270,27 @@ function rgbToHsl(r,g,b){
   return {h, s:s*100, l:l*100};
 }
 const hsl = hex => rgbToHsl(...hexToRgb(hex));
+const PATTERN_LABEL = {solid:'무지', stripe:'줄무늬', pattern:'패턴'};
+const PATTERN_LONG  = {solid:'무지', stripe:'줄무늬', pattern:'패턴·그래픽'};
+
+// 패턴 옷은 대표색 하나로 볼 수 없어서, 비중이 있는 색을 최대 3개까지 쓴다
+function paletteOf(key){
+  const it = state[key];
+  if (!it) return [];
+  if (it.manual) return [it.manual];
+  return it.colors.filter((c,i) => i === 0 || c.ratio >= 0.12).slice(0,3).map(c => c.hex);
+}
+// 받침에 따라 와/과를 고른다
+function wa(word){
+  const ch = word.charCodeAt(word.length - 1);
+  if (ch < 0xAC00 || ch > 0xD7A3) return word + '와';
+  return word + ((ch - 0xAC00) % 28 === 0 ? '와' : '과');
+}
+function rgbDist(a,b){
+  const A = hexToRgb(a), B = hexToRgb(b);
+  return Math.hypot(A[0]-B[0], A[1]-B[1], A[2]-B[2]);
+}
+
 const repColor = key => {
   const it = state[key];
   if (!it) return null;
@@ -328,6 +386,42 @@ function diagnose(){
     score += 5;
     notes.push(['전체 색 수','b', `유채색이 ${chromatic}개로 많아요. 색은 2개까지만 쓰는 게 안전해요.`]);
   }
+
+  // 패턴 보정 — 네 항목 점수는 대표색 기준이라, 패턴 옷은 따로 보정한다
+  const tagT = (state.top && state.top.tag) || 'solid';
+  const tagB = (state.bottom && state.bottom.tag) || 'solid';
+  const patT = tagT !== 'solid', patB = tagB !== 'solid';
+
+  if (patT && patB) {
+    const both = tagT === 'stripe' && tagB === 'stripe';
+    score += both ? -22 : -18;
+    notes.push(['패턴 궁합','b', both
+      ? '위아래 둘 다 줄무늬예요. 줄 간격이 다르면 눈이 어지러워져서 하나는 무지로 가는 게 안전해요.'
+      : '위아래 둘 다 패턴이라 시선이 분산돼요. 한쪽을 무지로 바꾸면 패턴이 살아납니다.']);
+  } else if (patT || patB) {
+    const pk = patT ? 'top' : 'bottom';
+    const sk = patT ? 'bottom' : 'top';
+    const pn = patT ? '상의' : '하의';
+    const sn = patT ? '하의' : '상의';
+    const solid = repColor(sk);
+    const pal = paletteOf(pk);
+    let near = pal[0], best = 1e9;
+    pal.forEach(h => { const d = rgbDist(h, solid); if (d < best) { best = d; near = h; } });
+    if (best <= 60) {
+      score += 7;
+      notes.push(['패턴 궁합','g',
+        `${pn} 패턴 안의 ${wa(colorName(hsl(near)))} ${sn} 색이 이어져요. 패턴 옷은 이렇게 속 색 하나를 받아주는 게 가장 안정적이에요.`]);
+    } else if (isNeutral(hsl(solid))) {
+      score += 4;
+      notes.push(['패턴 궁합','g',
+        `${sn}가 무채색이라 ${pn} 패턴을 그대로 받아줘요. 패턴 옷에 제일 실패 없는 짝이에요.`]);
+    } else {
+      score -= 4;
+      notes.push(['패턴 궁합','w',
+        `${sn} 색이 ${pn} 패턴 안에 없는 색이에요. 패턴 속 ${colorName(hsl(near))}(${near})에 맞추면 더 정리되고, 지금처럼 대비를 주는 것도 선택이에요.`]);
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
 
   const tag = score >= 80 ? ['그냥 입어도 됨','var(--good)']
             : score >= 66 ? ['괜찮음 · 소품으로 정리','var(--good)']
@@ -532,6 +626,92 @@ async function swapImage(key, u){
   }
 }
 
+/* ---------------------------------------------------------------- 핏 뷰 */
+let fitMode = 'side';
+const fitCtl = {top:{s:1.6, y:-12}, bottom:{s:1.6, y:-52}};
+
+document.querySelectorAll('#fitmode button').forEach(b => b.onclick = () => {
+  fitMode = b.dataset.mode;
+  document.querySelectorAll('#fitmode button').forEach(x => x.classList.toggle('on', x === b));
+  renderFit();
+});
+
+async function ensureCutouts(){
+  const jobs = ROLES.map(r => r.key).filter(k => state[k] && state[k].source && !state[k].cutDone);
+  if (!jobs.length) return false;
+  await Promise.all(jobs.map(async k => {
+    const it = state[k];
+    it.cutDone = true;                       // 실패해도 다시 시도하지 않는다
+    try {
+      const r = await (await fetch(`/api/cutout?u=${encodeURIComponent(it.source)}` +
+        `&r=${encodeURIComponent(it.referer || '')}`)).json();
+      if (r.image) { it.cut = r.image; it.cutBg = r.removed; }
+    } catch (e) { /* 원본 사진으로 그린다 */ }
+  }));
+  return true;
+}
+
+function renderFit(){
+  const el = $('#fit');
+  const have = ROLES.filter(r => state[r.key]);
+  if (!have.length) {
+    el.innerHTML = '<div class="empty">상품을 넣으면 사진으로 맞춰 볼 수 있어요.</div>';
+    return;
+  }
+
+  if (fitMode === 'side') {
+    el.innerHTML = `<div class="side">${have.map(r => {
+      const it = state[r.key];
+      const bar = it.colors.map(c =>
+        `<i style="background:${c.hex};flex:${Math.max(c.ratio, 0.04)}"></i>`).join('');
+      return `<figure>
+        <img src="${it.image}" alt="${r.name}">
+        <div class="bar2" title="사진에서 뽑은 색 비중">${bar}</div>
+        <figcaption>${r.name} · ${PATTERN_LONG[it.tag || 'solid']}</figcaption>
+      </figure>`;
+    }).join('')}</div>
+    <div class="status" style="margin-top:10px">아래 띠는 사진에서 뽑은 색과 그 비중이에요. 패턴 옷은 색이 여러 칸으로 나옵니다.</div>`;
+    return;
+  }
+
+  const slots = [['top','상의',0,46], ['bottom','하의',46,54]];
+  el.innerHTML = `
+    <div class="stage">
+      ${slots.map(([k,name,top,h]) => {
+        const it = state[k];
+        const box = `top:${top}%;height:${h}%`;
+        if (!it) return `<div class="win empty" style="${box}">${name} 없음</div>`;
+        const c = fitCtl[k];
+        return `<div class="win" data-slot="${k}" style="${box};--s:${c.s};--y:${c.y}%">
+          <img src="${it.cut || it.image}" alt="${name}">
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="fitctl">
+      ${slots.filter(([k]) => state[k]).map(([k,name]) => {
+        const c = fitCtl[k];
+        return `<b>${name} 크기</b>
+          <input type="range" min="0.8" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
+          <b>${name} 위치</b>
+          <input type="range" min="-180" max="20" step="1" value="${c.y}" data-fit="${k}:y">`;
+      }).join('')}
+    </div>
+    <div class="status" style="margin-top:10px">배경을 지운 사진을 위아래로 겹쳐 봅니다. 슬라이더로 옷이 보이는 위치를 맞추세요.</div>`;
+
+  // 슬라이더는 다시 그리지 않고 CSS 변수만 바꿔 끊김 없이 움직이게 한다
+  el.querySelectorAll('[data-fit]').forEach(inp => {
+    const [k, prop] = inp.dataset.fit.split(':');
+    inp.oninput = () => {
+      fitCtl[k][prop] = Number(inp.value);
+      const win = el.querySelector(`.win[data-slot="${k}"]`);
+      if (win) win.style.setProperty(prop === 's' ? '--s' : '--y',
+        prop === 's' ? inp.value : inp.value + '%');
+    };
+  });
+
+  ensureCutouts().then(changed => { if (changed) renderFit(); });
+}
+
 /* ---------------------------------------------------------------- 렌더 */
 function render(){
   $('#board').innerHTML = ROLES.map(r => {
@@ -553,6 +733,11 @@ function render(){
         ${n > 1 ? `<button class="ghost mini" data-pick="${r.key}">다른 색 ${n}개</button>` : ''}
         <input type="color" data-manual="${r.key}" value="${repColor(r.key)}" title="색 직접 지정">
         ${it.manual ? `<button class="ghost mini" data-auto="${r.key}">자동</button>` : ''}
+      </div>
+      <div class="tools" style="padding-top:0">
+        <div class="tags">${Object.keys(PATTERN_LABEL).map(t =>
+          `<button data-tag="${r.key}:${t}" class="${(it.tag||'solid')===t?'on':''}">${PATTERN_LABEL[t]}</button>`
+        ).join('')}</div>
       </div>
     </div>`;
   }).join('');
@@ -583,7 +768,13 @@ function render(){
     delete state[b.dataset.auto].manual;
     render();
   });
+  document.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => {
+    const [key, tag] = b.dataset.tag.split(':');
+    state[key].tag = tag;
+    render();
+  });
   renderPicker();
+  renderFit();
 
   const d = diagnose();
   $('#result').innerHTML = !d
