@@ -3,18 +3,31 @@
 상하의 상품 URL을 넣으면 이미지에서 실제 색을 뽑아 어울리는지 점수로 알려주고,
 여행지 기온까지 맞춰 보는 로컬 웹 도구.
 
-맥에서 서버를 켜고 브라우저로 `http://localhost:8787` 에 접속해서 쓴다.
-상품 이미지는 CORS·핫링크 때문에 브라우저만으로는 못 가져오므로 서버가 대신 긁어온다.
+**설치 안내 → https://dlthwjd02-domi.github.io/coordi-checker/**
 
-## 실행
+상품 이미지는 CORS·핫링크 때문에 브라우저만으로는 못 가져오므로 파이썬 서버가 대신 긁어온다.
+그래서 GitHub Pages 같은 정적 호스팅으로는 돌아가지 않고, 각자 맥에서 서버를 켜야 한다.
+
+## 설치와 실행
+
+1. [폴더 내려받기](https://github.com/dlthwjd02-domi/coordi-checker/archive/refs/heads/main.zip) 후 압축 풀기
+2. `start.command` 더블클릭 — 브라우저가 자동으로 열린다
+
+처음 한 번은 `.venv` 를 만들고 꾸러미를 깔아서 1~2분 걸린다. 맥 전체 파이썬 설정은 건드리지 않는다.
+"확인되지 않은 개발자" 경고가 뜨면 `start.command` 를 우클릭 → 열기 로 한 번만 실행하면 된다.
+
+끄려면 터미널 창을 닫거나 `Ctrl+C`. 이미 켜져 있으면 다시 더블클릭해도 브라우저만 열린다.
+
+직접 돌릴 때는 이렇게 한다.
 
 ```
-./start.command          # 서버 켜고 브라우저까지 열림
-python3 server.py        # 또는 직접 실행
-pkill -f server.py       # 종료
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python server.py        # http://localhost:8787
+pkill -f server.py                # 종료
 ```
 
-의존성은 `requests`, `Pillow` 뿐이다 (Python 3.14 기준). 포트는 `PORT` 환경변수로 바꿀 수 있다.
+의존성은 `requests`, `Pillow` 뿐이다. 포트는 `PORT` 환경변수로 바꿀 수 있다.
+서버는 `127.0.0.1` 에만 붙으므로 같은 네트워크의 다른 기기에서는 접속할 수 없다.
 
 ## 파일
 
@@ -24,6 +37,9 @@ pkill -f server.py       # 종료
 | `static/index.html` | 화면 전부 (CSS·JS 인라인). 코디 보드, 진단, 여행지 카드 |
 | `start.command` | 더블클릭 런처 |
 | `cache/` | 내려받은 이미지와 기후 조회 결과 (git 추적 안 함) |
+| `requirements.txt` | `requests`, `Pillow` |
+| `docs/` | GitHub Pages 설치 안내 페이지 |
+| `AUDIT.md` | 전체 점검 기록 |
 
 ## 쓰는 흐름
 

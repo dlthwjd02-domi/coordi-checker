@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>코디 체커 — 여행 갈 때 옷 맞춰보기</title>
+<meta name="description" content="상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려주고, 여행지 기온까지 맞춰 보는 도구.">
+<style>
+  :root{--bg:#f6f4f1;--card:#fff;--ink:#1b1a18;--muted:#8a8681;--line:#e3dfd9;
+        --good:#2f7d5d;--warn:#b4752a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto;padding:56px 20px 90px}
+  header{margin-bottom:40px}
+  h1{font-size:34px;letter-spacing:-1px;margin:0 0 10px}
+  .lead{font-size:17px;color:#5b5752;margin:0 0 6px}
+  .note{font-size:14px;color:var(--muted);margin:0}
+  h2{font-size:20px;letter-spacing:-.4px;margin:44px 0 14px}
+  h3{font-size:15px;margin:26px 0 8px}
+  p{margin:0 0 12px}
+  img{max-width:100%;display:block;border:1px solid var(--line);border-radius:12px}
+  .shots{display:grid;grid-template-columns:1fr;gap:14px;margin:20px 0 8px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:640px){.pair{grid-template-columns:1fr}}
+  figcaption{font-size:13px;color:var(--muted);margin-top:7px}
+  figure{margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:16px 0}
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:0}
+  ol.steps li{counter-increment:s;position:relative;padding-left:40px;margin-bottom:22px}
+  ol.steps li:last-child{margin-bottom:0}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:2px;width:26px;height:26px;
+    border-radius:50%;background:var(--ink);color:#fff;font-size:13px;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+  ol.steps b{display:block;font-size:16px;margin-bottom:3px}
+  ol.steps span{font-size:15px;color:#5b5752}
+  code{background:#eeebe6;padding:2px 6px;border-radius:5px;font-size:14px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--ink);color:#f2efe9;padding:14px 16px;border-radius:10px;overflow-x:auto;
+    font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;margin:10px 0}
+  .btn{display:inline-block;background:var(--ink);color:#fff;text-decoration:none;
+    padding:13px 22px;border-radius:11px;font-weight:600;font-size:16px}
+  .btn:hover{opacity:.85}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);margin-left:8px}
+  ul{margin:0 0 12px;padding-left:22px}
+  li{margin-bottom:6px}
+  table{width:100%;border-collapse:collapse;font-size:15px;margin:10px 0}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:13px;color:var(--muted);font-weight:600}
+  .warn{background:#fdf6ec;border:1px solid #efdcc0;border-radius:12px;padding:16px 18px;
+    font-size:15px;margin:18px 0}
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>코디 체커</h1>
+    <p class="lead">상하의 상품 URL을 넣으면 사진에서 실제 색을 뽑아 어울리는지 점수로 알려주고,
+      여행지 기온까지 맞춰 보는 도구예요.</p>
+    <p class="note">맥에서 돌아갑니다. 설치는 폴더 받아서 파일 하나 더블클릭이면 끝이에요.</p>
+  </header>
+
+  <p>
+    <a class="btn" href="https://github.com/dlthwjd02-domi/coordi-checker/archive/refs/heads/main.zip">폴더 내려받기 (.zip)</a>
+    <a class="btn ghost" href="https://github.com/dlthwjd02-domi/coordi-checker">GitHub에서 보기</a>
+  </p>
+
+  <div class="shots">
+    <figure>
+      <img src="shot-desktop.png" alt="코디 체커 화면. 위에 여행지와 기온, 아래에 상품 URL 입력과 코디 보드">
+      <figcaption>여행지를 먼저 고르면 그 달 기온과 옷차림 조언이 나오고, 아래에 옷을 넣습니다.</figcaption>
+    </figure>
+    <div class="pair">
+      <figure>
+        <img src="shot-fit.png" alt="배경을 지운 상하의 사진을 위아래로 겹친 핏 뷰">
+        <figcaption>핏 뷰 — 배경을 지운 사진을 겹쳐서 실제로 어떻게 보이는지 확인</figcaption>
+      </figure>
+      <figure>
+        <img src="shot-mobile.png" alt="휴대폰 화면의 코디 체커">
+        <figcaption>휴대폰에서도 같은 화면으로 보입니다</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h2>쓰는 방법</h2>
+  <div class="card">
+    <ol class="steps">
+      <li><b>폴더를 내려받아 압축을 풉니다</b>
+        <span>위의 “폴더 내려받기” 버튼을 누르면 <code>coordi-checker-main.zip</code> 이 저장돼요.
+          더블클릭해서 풀고, 원하는 위치(예: 서류 폴더)로 옮겨 두세요.</span></li>
+      <li><b><code>start.command</code> 를 더블클릭합니다</b>
+        <span>검은 터미널 창이 열리고 브라우저가 자동으로 뜹니다.
+          <b>처음 한 번만</b> 준비 작업으로 1~2분 걸려요. 그다음부터는 몇 초면 열립니다.</span></li>
+      <li><b>여행지 → 옷 순서로 넣습니다</b>
+        <span>나라나 도시를 한글로 검색하고 월을 고른 뒤, 상의·하의 상품 주소를 붙여넣고
+          “불러오기”를 누르면 됩니다.</span></li>
+    </ol>
+  </div>
+
+  <div class="warn">
+    <b>“확인되지 않은 개발자” 경고가 뜨면</b><br>
+    맥이 인터넷에서 받은 파일을 막는 거예요. <code>start.command</code> 를
+    <b>우클릭(또는 control+클릭) → 열기</b> 로 한 번만 실행하면 그다음부터는 더블클릭으로 됩니다.
+  </div>
+
+  <h3>끄고 다시 켜기</h3>
+  <p>터미널 창을 닫거나 <code>Ctrl+C</code> 를 누르면 꺼집니다. 다시 켤 때도
+    <code>start.command</code> 더블클릭이에요. 이미 켜져 있으면 브라우저만 다시 엽니다.</p>
+
+  <h2>무엇을 알려주나요</h2>
+
+  <h3>상하의가 어울리는지 100점으로</h3>
+  <table>
+    <tr><th>항목</th><th>배점</th><th>보는 것</th></tr>
+    <tr><td>색 조화</td><td>40</td><td>상하의 색상차. 톤온톤·보색은 높게, 어중간한 구간은 낮게</td></tr>
+    <tr><td>명도 대비</td><td>25</td><td>위아래가 한 덩어리로 뭉쳐 보이지 않는지</td></tr>
+    <tr><td>채도 균형</td><td>20</td><td>둘 다 진해서 서로 싸우지 않는지</td></tr>
+    <tr><td>전체 색 수</td><td>15</td><td>유채색은 두 개까지</td></tr>
+  </table>
+  <p>항목마다 “벨트로 허리선을 끊어주면 좋아요” 같은 이유가 붙습니다.
+    그래픽·스트라이프 옷은 색을 하나로 볼 수 없으니, 패턴 안의 색들과 맞춰서 따로 판단해요.</p>
+
+  <h3>여행지 기온에 맞는 옷차림</h3>
+  <p>최근 3년 그 달의 실제 관측 기온을 가져와 8단계로 알려줍니다. 눈·비 오는 날수와 일교차까지 봐서
+    “실내가 더우니 벗을 수 있게 겹쳐 입으세요”, “신발은 예쁜 것보다 방수로” 같은 조언이 붙어요.
+    이번 달을 고르면 7일 실제 예보도 같이 나옵니다.</p>
+  <p>한글로 전 세계 어디든 검색됩니다 — 경주, 통영, 밴쿠버, 밴프, 치앙마이, 레이캬비크.</p>
+
+  <h3>색이 잘못 잡히면</h3>
+  <ul>
+    <li>상품 카드의 <b>“다른 색 N개”</b> 로 원하는 컬러웨이를 고릅니다</li>
+    <li>팔레트 칸을 클릭해 대표색을 바꿉니다</li>
+    <li>그래도 안 되면 <b>컬러 피커</b>로 화면의 옷 색을 스포이드로 직접 찍으면 됩니다</li>
+  </ul>
+
+  <h2>알아둘 점</h2>
+  <ul>
+    <li>쿠팡·에이블리처럼 자동 수집을 막는 사이트는 안 됩니다. 상품 이미지 주소를 직접 넣거나
+      색을 직접 지정하면 돼요. 무신사·유니클로·나이키·아임웹 쇼핑몰은 잘 됩니다.</li>
+    <li>서버는 내 맥에서만 열립니다(<code>127.0.0.1</code>). 같은 와이파이의 다른 사람은 볼 수 없어요.</li>
+    <li>저장한 코디는 그 브라우저에만 남습니다. 다른 기기로는 안 넘어갑니다.</li>
+    <li>기온 데이터는 Open-Meteo, 지역 검색은 Open-Meteo와 OpenStreetMap을 씁니다.
+      가입이나 키 발급은 필요 없어요.</li>
+  </ul>
+
+  <footer>
+    만든 사람 도미 · 코드와 자세한 설명은
+    <a href="https://github.com/dlthwjd02-domi/coordi-checker">GitHub 저장소</a>에 있습니다.
+  </footer>
+
+</div>
+</body>
+</html>
