@@ -934,7 +934,7 @@ function renderFit(){
       ${slots.filter(([k]) => state[k]).map(([k,name]) => {
         const c = fitCtl[k];
         return `<b>${name} 크기</b>
-          <input type="range" min="0.8" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
+          <input type="range" min="0.25" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
           <b>${name} 위아래</b>
           <input type="range" min="-180" max="20" step="1" value="${c.y}" data-fit="${k}:y">
           <b>${name} 좌우</b>
@@ -1116,7 +1116,9 @@ coordi.checkLocal().then(ok => {
     ? '<span class="badge">내 맥 연결됨</span> 무신사·스마트스토어도 주소로 됩니다 · '
       + '<a href="local.html" style="color:inherit">이게 뭔가요?</a>'
     : '설치 없이 이 화면에서 바로 돌아갑니다. 무신사·스마트스토어는 <b>사진</b> 버튼으로 올리거나, '
-      + '<a href="local.html" style="color:inherit">내 맥에서 돌리면</a> 주소로도 돼요.';
+      + '<a href="local.html" style="color:inherit">내 맥에서 돌리면</a> 주소로도 돼요.'
+      + '<span id="dbg" style="display:block;font-size:11px;opacity:.6">'
+      + (coordi.localReason() || '(사유 없음)') + '</span>';
 });
 
 renderLooks();

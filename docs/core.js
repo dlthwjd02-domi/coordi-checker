@@ -12,6 +12,7 @@ const WORKER_RELAY = 'https://coordi-fetch.domii.workers.dev';
 const LOCAL_RELAY = 'http://127.0.0.1:8787/api';
 let relayBase = WORKER_RELAY;
 let localCheck = null;
+let localError = '';
 
 function checkLocal(){
   if (localCheck) return localCheck;
@@ -22,7 +23,7 @@ function checkLocal(){
       const res = await fetch(`${LOCAL_RELAY}/health`, { signal: stop.signal });
       clearTimeout(timer);
       if (res.ok && (await res.json()).relay) { relayBase = LOCAL_RELAY; return true; }
-    } catch (e) { /* 안 켜져 있으면 워커로 */ }
+    } catch (e) { localError = (e && e.name) + ': ' + (e && e.message); }
     return false;
   })();
   return localCheck;
@@ -922,4 +923,4 @@ async function getClimate(lat, lon, month, withForecast){
 
 window.coordi = { getProduct, getLocalPhoto, refinePhoto, getImageInfo, getCutout,
                   searchPlaces, getClimate, thumb: relayImg,
-                  checkLocal, usingLocal };
+                  checkLocal, usingLocal, localReason: () => localError };

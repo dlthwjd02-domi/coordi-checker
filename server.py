@@ -1021,6 +1021,20 @@ class Handler(SimpleHTTPRequestHandler):
         origin = self.headers.get("Origin")
         return origin if origin in WEB_ORIGINS else None
 
+    def do_OPTIONS(self):
+        """크롬은 https 페이지가 사설망(내 맥) 으로 요청할 때 먼저 프리플라이트를 보낸다.
+        Access-Control-Allow-Private-Network 를 줘야 본 요청이 통과한다."""
+        origin = self._allow_origin()
+        self.send_response(204)
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "content-type")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.send_header("Access-Control-Max-Age", "86400")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _relay(self, target, referer, as_image):
         """웹 화면 대신 이 맥이 가져온다 (워커는 쇼핑몰 IP 차단에 걸린다)."""
         if not re.match(r"^https?://", target or ""):
@@ -1035,6 +1049,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Access-Control-Expose-Headers", "X-Final-Url")
         self.send_header("X-Final-Url", target)
         self.send_header("Content-Length", str(len(raw)))
@@ -1132,6 +1147,7 @@ class Handler(SimpleHTTPRequestHandler):
         origin = self._allow_origin()
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()

@@ -853,7 +853,7 @@ function renderFit(){
       ${slots.filter(([k]) => state[k]).map(([k,name]) => {
         const c = fitCtl[k];
         return `<b>${name} 크기</b>
-          <input type="range" min="0.8" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
+          <input type="range" min="0.25" max="3" step="0.05" value="${c.s}" data-fit="${k}:s">
           <b>${name} 위아래</b>
           <input type="range" min="-180" max="20" step="1" value="${c.y}" data-fit="${k}:y">
           <b>${name} 좌우</b>
