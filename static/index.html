@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>코디 체커</title>
+<style>
+  :root{
+    --bg:#f6f4f1; --card:#fff; --ink:#1b1a18; --muted:#8a8681;
+    --line:#e3dfd9; --accent:#1b1a18; --good:#2f7d5d; --warn:#b4752a; --bad:#b4452a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 20px 80px}
+  header{margin-bottom:28px}
+  h1{font-size:26px;letter-spacing:-.5px;margin:0 0 6px}
+  header p{margin:0;color:var(--muted);font-size:14px}
+  .layout{display:grid;grid-template-columns:400px 1fr;gap:24px;align-items:start}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;font-weight:600}
+
+  .slot{margin-bottom:14px}
+  .slot label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+  .slot label span{color:var(--muted);font-weight:400}
+  .row{display:flex;gap:6px}
+  input[type=text]{flex:1;min-width:0;padding:9px 11px;border:1px solid var(--line);border-radius:9px;
+    background:#fbfaf9;font:inherit;font-size:13px}
+  input[type=text]:focus{outline:none;border-color:var(--ink);background:#fff}
+  button{padding:9px 13px;border:1px solid var(--ink);background:var(--ink);color:#fff;
+    border-radius:9px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  button:hover{opacity:.85}
+  button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+  button:disabled{opacity:.45;cursor:default}
+  .status{font-size:12px;color:var(--muted);margin-top:5px;min-height:16px}
+  .status.err{color:var(--bad)}
+
+  select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fbfaf9;font:inherit;font-size:13px}
+
+  /* 코디 보드 */
+  .board{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+  .item{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;position:relative}
+  .item .ph{aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;
+    background:repeating-linear-gradient(45deg,#f2efeb,#f2efeb 8px,#eae6e0 8px,#eae6e0 16px);
+    color:var(--muted);font-size:12px;text-align:center;padding:12px}
+  .item img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#fff}
+  .item .meta{padding:9px 10px}
+  .item .role{font-size:11px;letter-spacing:.06em;color:var(--muted);font-weight:600}
+  .item .name{font-size:12px;line-height:1.4;margin-top:2px;max-height:34px;overflow:hidden}
+  .swatches{display:flex;gap:0;height:22px;cursor:pointer}
+  .swatches i{flex:1;display:block;position:relative}
+  .swatches i.on::after{content:"";position:absolute;inset:auto 0 0 0;height:3px;background:#1b1a18}
+  .item .x{position:absolute;top:7px;right:7px;width:22px;height:22px;border-radius:50%;
+    border:none;background:rgba(27,26,24,.72);color:#fff;font-size:13px;padding:0;line-height:22px}
+
+  .item .tools{display:flex;gap:4px;align-items:center;padding:0 10px 10px}
+  .mini{font-size:11px;padding:4px 7px;border-radius:7px}
+  .item .rep{font-size:11px;color:var(--muted);padding:0 10px 2px}
+  input[type=color]{width:28px;height:24px;padding:0;border:1px solid var(--line);
+    border-radius:7px;background:none;cursor:pointer}
+  .pickbar{display:flex;align-items:center;gap:8px;font-size:13px;margin:16px 0 10px;
+    padding-top:14px;border-top:1px solid var(--line)}
+  .pickbar .sub{color:var(--muted);font-size:12px}
+  .pickbar button{margin-left:auto}
+  .picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:7px;
+    max-height:340px;overflow-y:auto}
+  .cand{border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:pointer;background:#fff}
+  .cand:hover{border-color:var(--ink)}
+  .cand.on{outline:2px solid var(--ink);outline-offset:1px}
+  .cand img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff}
+  .cand i{display:block;height:9px}
+
+  /* 결과 */
+  .verdict{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
+  .score{font-size:44px;font-weight:700;letter-spacing:-2px;line-height:1}
+  .score small{font-size:16px;font-weight:500;color:var(--muted);letter-spacing:0}
+  .tag{font-size:14px;font-weight:700}
+  .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:12px 0 18px}
+  .bar i{display:block;height:100%;background:var(--ink)}
+  ul.notes{list-style:none;padding:0;margin:0}
+  ul.notes li{display:flex;gap:9px;padding:9px 0;border-top:1px dashed var(--line);font-size:14px}
+  ul.notes li:first-child{border-top:none}
+  ul.notes b{flex:0 0 74px;font-size:12px;color:var(--muted);font-weight:600;padding-top:2px}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  .g{background:var(--good)}.w{background:var(--warn)}.b{background:var(--bad)}
+  .empty{color:var(--muted);font-size:14px;text-align:center;padding:34px 10px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chips button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px;padding:6px 10px}
+  .chips button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .hits{margin-top:8px;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .hits button{display:block;width:100%;text-align:left;background:#fff;color:var(--ink);
+    border:none;border-top:1px solid var(--line);border-radius:0;font-weight:500;font-size:13px;padding:9px 11px}
+  .hits button:first-child{border-top:none}
+  .hits button:hover{background:#f6f4f1;opacity:1}
+  .hits button small{color:var(--muted);font-weight:400;margin-left:6px}
+  .clim{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .clim .where{font-size:13px;font-weight:600;margin-bottom:8px}
+  .clim .temps{display:flex;align-items:baseline;gap:10px;margin-bottom:3px}
+  .clim .big{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1}
+  .clim .sub{font-size:12px;color:var(--muted)}
+  .clim .band{font-size:14px;font-weight:700;margin:12px 0 5px}
+  .clim .advice{font-size:13px;line-height:1.65}
+  .clim .advice p{margin:0 0 6px}
+  .clim .advice p:last-child{margin:0}
+  .fc{display:flex;gap:4px;margin-top:12px}
+  .fc div{flex:1;text-align:center;font-size:10px;color:var(--muted);line-height:1.5}
+  .fc div b{display:block;font-size:12px;color:var(--ink)}
+  .looks{display:flex;flex-wrap:wrap;gap:8px}
+  .looks button{background:#fff;color:var(--ink);border-color:var(--line);font-weight:500;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>코디 체커</h1>
+    <p>상하의 상품 URL을 넣으면 실제 색을 뽑아 어울리는지 점수로 알려주고, 여행지 기온까지 맞춰 봐요.</p>
+  </header>
+
+  <div class="layout">
+    <!-- 입력 -->
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>상품 URL</h2>
+        <div id="slots"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <h2>여행지 · 시기</h2>
+        <div class="row">
+          <input type="text" id="place-q" placeholder="도시 이름 (예: 밴쿠버, 서울, 다낭)" autocomplete="off">
+          <button id="place-go">검색</button>
+        </div>
+        <div class="status" id="place-st"></div>
+        <div class="hits" id="hits" hidden></div>
+        <div class="chips" id="chips"></div>
+        <select id="month" style="margin-top:12px"></select>
+        <div id="climate"></div>
+      </div>
+
+      <div class="card">
+        <h2>저장한 코디</h2>
+        <div class="looks" id="looks"></div>
+        <div style="margin-top:12px;display:flex;gap:6px">
+          <button id="save">지금 코디 저장</button>
+          <button class="ghost" id="reset">전체 비우기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 결과 -->
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>코디 보드</h2>
+        <div class="board" id="board"></div>
+        <div id="picker"></div>
+      </div>
+      <div class="card">
+        <h2>어울림 진단</h2>
+        <div id="result"><div class="empty">상의와 하의를 넣으면 진단이 나와요.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ROLES = [
+  {key:'outer', name:'아우터', hint:'선택 · 코트/패딩'},
+  {key:'top',   name:'상의',   hint:'필수'},
+  {key:'bottom',name:'하의',   hint:'필수'},
+  {key:'shoes', name:'신발',   hint:'선택'},
+];
+const state = {};            // key -> {title, image, colors, pick, site, url}
+const $ = s => document.querySelector(s);
+
+/* ---------------------------------------------------------------- 입력 UI */
+$('#slots').innerHTML = ROLES.map(r => `
+  <div class="slot">
+    <label for="in-${r.key}">${r.name} <span>· ${r.hint}</span></label>
+    <div class="row">
+      <input type="text" id="in-${r.key}" placeholder="상품 페이지 또는 이미지 주소" autocomplete="off">
+      <button data-load="${r.key}">불러오기</button>
+    </div>
+    <div class="status" id="st-${r.key}"></div>
+  </div>`).join('');
+
+document.querySelectorAll('[data-load]').forEach(b =>
+  b.onclick = () => load(b.dataset.load));
+ROLES.forEach(r => $('#in-'+r.key).addEventListener('keydown', e => {
+  if (e.key === 'Enter') load(r.key);
+}));
+
+async function load(key){
+  const input = $('#in-'+key), st = $('#st-'+key);
+  const url = input.value.trim();
+  if (!url) return;
+  st.className = 'status'; st.textContent = '불러오는 중…';
+  try {
+    const res = await fetch('/api/product', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    data.pick = 0;
+    state[key] = data;
+    st.textContent = data.site + (data.price ? ' · ' + Number(data.price.replace(/[^0-9.]/g,'')).toLocaleString() + '원' : '');
+    render();
+  } catch (e) {
+    st.className = 'status err';
+    st.textContent = e.message;
+  }
+}
+
+/* ---------------------------------------------------------------- 색 계산 */
+function hexToRgb(h){
+  const n = parseInt(h.slice(1),16);
+  return [n>>16 & 255, n>>8 & 255, n & 255];
+}
+function rgbToHsl(r,g,b){
+  r/=255; g/=255; b/=255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+  let h = 0;
+  if (d) {
+    if (mx===r) h = ((g-b)/d + (g<b?6:0));
+    else if (mx===g) h = (b-r)/d + 2;
+    else h = (r-g)/d + 4;
+    h *= 60;
+  }
+  const l = (mx+mn)/2;
+  const s = d ? d/(1-Math.abs(2*l-1)) : 0;
+  return {h, s:s*100, l:l*100};
+}
+const hsl = hex => rgbToHsl(...hexToRgb(hex));
+const repColor = key => {
+  const it = state[key];
+  if (!it) return null;
+  return it.manual || it.colors[it.pick || 0].hex;
+};
+const isNeutral = c => c.s < 16 || c.l < 14 || c.l > 90;
+function hueGap(a,b){ const d = Math.abs(a-b) % 360; return Math.min(d, 360-d); }
+
+function colorName(c){
+  if (c.l < 14) return '블랙';
+  if (c.l > 90) return '화이트';
+  if (c.s < 16) return c.l > 60 ? '라이트 그레이' : '차콜/그레이';
+  const h = c.h, tone = c.l < 35 ? '딥 ' : c.l > 70 ? '라이트 ' : '';
+  const names = [[15,'레드'],[45,'오렌지/베이지'],[70,'옐로'],[160,'그린'],[200,'틸'],[255,'블루'],[290,'퍼플'],[335,'핑크'],[360,'레드']];
+  return tone + names.find(n => h <= n[0])[1];
+}
+
+/* ---------------------------------------------------------------- 진단 */
+function diagnose(){
+  const top = repColor('top'), bottom = repColor('bottom');
+  if (!top || !bottom) return null;
+  const t = hsl(top), b = hsl(bottom);
+  const notes = [];
+  let score = 0;
+
+  // 1. 색 조화 (40)
+  const gap = hueGap(t.h, b.h);
+  if (isNeutral(t) || isNeutral(b)) {
+    score += 37;
+    notes.push(['색 조화','g',
+      `${colorName(t)} 상의 + ${colorName(b)} 하의. 한쪽이 무채색이라 실패 확률이 거의 없는 조합이에요.`]);
+  } else if (gap <= 22) {
+    score += 34;
+    notes.push(['색 조화','g', `색상이 거의 같은 톤온톤(색상차 ${Math.round(gap)}°). 차분하고 키 커 보이는 조합이에요.`]);
+  } else if (gap <= 45) {
+    score += 13;
+    notes.push(['색 조화','w', `색상차가 ${Math.round(gap)}°로 어중간해요. 비슷한데 미묘하게 달라서 "잘못 맞춘 세트"처럼 보이기 쉬워요.`]);
+  } else if (gap <= 105) {
+    score += 27;
+    notes.push(['색 조화','g', `색상차 ${Math.round(gap)}°. 서로 받쳐주는 유사색 조합이라 무난해요.`]);
+  } else if (gap < 150) {
+    score += 12;
+    notes.push(['색 조화','w', `색상차 ${Math.round(gap)}°는 보색도 유사색도 아닌 구간이에요. 둘 중 하나를 톤 다운하면 좋아요.`]);
+  } else {
+    score += 31;
+    notes.push(['색 조화','g', t.s < 42 && b.s < 42
+      ? `${colorName(t)} ↔ ${colorName(b)} 보색 관계인데 둘 다 톤이 차분해서 오히려 자연스러워요. 실패 없는 조합이에요.`
+      : `${colorName(t)} ↔ ${colorName(b)} 보색 대비. 의도적으로 튀는 조합이라 하나는 채도를 낮춰 주세요.`]);
+  }
+
+  // 2. 명도 대비 (25)
+  const dl = Math.abs(t.l - b.l);
+  if (dl >= 14 && dl <= 58) {
+    score += 25;
+    notes.push(['명도 대비','g', `밝기 차이 ${Math.round(dl)}p. 상하의가 분리돼 보여서 비율이 잘 살아요.`]);
+  } else if (dl < 9) {
+    score += 11;
+    notes.push(['명도 대비','b', `밝기가 거의 같아요(${Math.round(dl)}p). 위아래가 한 덩어리로 뭉쳐 보여서 벨트·아우터로 허리선을 끊어주면 좋아요.`]);
+  } else if (dl < 14) {
+    score += 18;
+    notes.push(['명도 대비','w', `밝기 차이 ${Math.round(dl)}p로 살짝 부족해요. 신발이나 가방으로 대비를 더해 주세요.`]);
+  } else if (dl <= 72) {
+    score += 22;
+    notes.push(['명도 대비','g', `밝기 차이 ${Math.round(dl)}p. 뚜렷한 대비로 깔끔하게 떨어져요.`]);
+  } else {
+    score += 18;
+    notes.push(['명도 대비','w', `밝기 차이가 ${Math.round(dl)}p로 커요. 경계가 뚝 끊겨 보이니 중간 톤 아우터를 걸치면 자연스러워요.`]);
+  }
+
+  // 3. 채도 균형 (20)
+  const hi = [t,b].filter(c => c.s > 45).length;
+  if (hi === 2) {
+    score += 7;
+    notes.push(['채도 균형','b','위아래 둘 다 색이 진해서 서로 주인공 싸움을 해요. 한쪽을 무채색이나 연한 톤으로 바꾸는 게 안전해요.']);
+  } else if (hi === 1) {
+    score += 20;
+    notes.push(['채도 균형','g','한쪽만 색이 살아 있어요. 포인트–베이스가 명확한 이상적인 배분이에요.']);
+  } else {
+    score += 16;
+    notes.push(['채도 균형','g','둘 다 채도가 낮아 차분해요. 가방이나 목도리로 색 포인트 하나 넣으면 살아나요.']);
+  }
+
+  // 4. 전체 색 개수 (15)
+  const all = ROLES.map(r => repColor(r.key)).filter(Boolean).map(hsl);
+  const chromatic = all.filter(c => !isNeutral(c)).length;
+  if (chromatic <= 2) {
+    score += 15;
+    notes.push(['전체 색 수','g', `유채색 ${chromatic}개. 전체가 정리돼 보여요.`]);
+  } else if (chromatic === 3) {
+    score += 10;
+    notes.push(['전체 색 수','w','유채색이 3개예요. 신발이나 아우터 중 하나는 블랙·그레이로 빼는 걸 권해요.']);
+  } else {
+    score += 5;
+    notes.push(['전체 색 수','b', `유채색이 ${chromatic}개로 많아요. 색은 2개까지만 쓰는 게 안전해요.`]);
+  }
+
+  const tag = score >= 80 ? ['그냥 입어도 됨','var(--good)']
+            : score >= 66 ? ['괜찮음 · 소품으로 정리','var(--good)']
+            : score >= 52 ? ['애매함 · 한 가지만 바꾸자','var(--warn)']
+            :               ['다시 고민 권장','var(--bad)'];
+  return {score, notes, tag};
+}
+
+/* ---------------------------------------------------------------- 여행지 · 기후 */
+const PLACES = [
+  {name:'밴쿠버', where:'캐나다', lat:49.25, lon:-123.12},
+  {name:'토론토', where:'캐나다', lat:43.71, lon:-79.40},
+  {name:'몬트리올', where:'캐나다', lat:45.51, lon:-73.59},
+  {name:'캘거리', where:'캐나다', lat:51.05, lon:-114.07},
+  {name:'서울', where:'한국', lat:37.57, lon:126.98},
+  {name:'부산', where:'한국', lat:35.18, lon:129.08},
+  {name:'도쿄', where:'일본', lat:35.68, lon:139.69},
+  {name:'방콕', where:'태국', lat:13.75, lon:100.50},
+  {name:'다낭', where:'베트남', lat:16.07, lon:108.22},
+  {name:'파리', where:'프랑스', lat:48.86, lon:2.35},
+  {name:'뉴욕', where:'미국', lat:40.71, lon:-74.01},
+];
+
+const BANDS = [
+  {min: 27, label:'한여름 · 무더움', wear:'린넨이나 면 반팔에 통풍 되는 하의. 아우터는 실내 냉방 대비용 얇은 셔츠 하나로 충분해요.'},
+  {min: 22, label:'초여름 · 따뜻함', wear:'반팔이나 얇은 셔츠 + 가벼운 하의. 저녁엔 얇은 가디건 하나 챙기면 돼요.'},
+  {min: 17, label:'봄가을 · 쾌적함', wear:'긴팔 티나 얇은 니트 + 면바지. 겉옷에 가릴 게 없어서 상하의 색 조합이 그대로 드러나는 기온이에요.'},
+  {min: 11, label:'늦가을 · 선선함', wear:'얇은 니트 + 트렌치나 바람막이. 겉옷은 벗어서 들 수 있는 걸로 고르세요.'},
+  {min:  1, label:'초겨울 · 쌀쌀함', wear:'이너 + 니트 + 두꺼운 코트 3겹. 실내가 더운 곳이 많으니 벗을 수 있게 겹쳐 입는 게 핵심이에요.'},
+  {min: -5, label:'한겨울 · 추움', wear:'히트텍 + 니트 + 패딩. 목도리와 장갑은 선택이 아니라 필수예요.'},
+  {min:-12, label:'강추위', wear:'롱패딩에 기모 하의까지. 면 소재는 땀이 차면 오히려 더 추워지니 울이나 기능성 소재로 가세요.'},
+  {min:-99, label:'극한 추위', wear:'코디보다 방한이 먼저예요. 롱패딩·기모 내복·두꺼운 양말·귀 덮는 모자. 노출된 피부는 20분이면 위험해요.'},
+];
+
+let place = null, clim = null;
+const thisMonth = new Date().getMonth() + 1;
+
+$('#month').innerHTML = Array.from({length:12}, (_,i) =>
+  `<option value="${i+1}" ${i+1===thisMonth?'selected':''}>${i+1}월${i+1===thisMonth?' (이번 달)':''}</option>`).join('');
+
+$('#chips').innerHTML = PLACES.map((p,i) =>
+  `<button data-chip="${i}">${p.name}</button>`).join('');
+document.querySelectorAll('[data-chip]').forEach(b =>
+  b.onclick = () => setPlace(PLACES[b.dataset.chip]));
+
+$('#place-go').onclick = searchPlace;
+$('#place-q').addEventListener('keydown', e => { if (e.key === 'Enter') searchPlace(); });
+$('#month').onchange = loadClimate;
+
+async function searchPlace(){
+  const q = $('#place-q').value.trim();
+  if (!q) return;
+  $('#place-st').className = 'status';
+  $('#place-st').textContent = '찾는 중…';
+  $('#hits').hidden = true;
+  try {
+    const r = await (await fetch('/api/places?q=' + encodeURIComponent(q))).json();
+    if (r.error) throw new Error(r.error);
+    if (!r.results.length) { $('#place-st').textContent = '그런 지역을 못 찾았어요.'; return; }
+    $('#place-st').textContent = '';
+    $('#hits').hidden = false;
+    $('#hits').innerHTML = r.results.map((p,i) =>
+      `<button data-hit="${i}">${p.name}<small>${p.where}</small></button>`).join('');
+    document.querySelectorAll('[data-hit]').forEach(b => b.onclick = () => {
+      $('#hits').hidden = true;
+      setPlace(r.results[b.dataset.hit]);
+    });
+  } catch (e) {
+    $('#place-st').className = 'status err';
+    $('#place-st').textContent = e.message;
+  }
+}
+
+function setPlace(p){
+  place = p;
+  $('#place-q').value = '';
+  $('#place-st').textContent = '';
+  document.querySelectorAll('[data-chip]').forEach(b =>
+    b.classList.toggle('on', PLACES[b.dataset.chip].name === p.name));
+  loadClimate();
+}
+
+async function loadClimate(){
+  if (!place) return;
+  const month = Number($('#month').value);
+  $('#climate').innerHTML = '<div class="clim"><div class="sub">기온 자료를 불러오는 중…</div></div>';
+  try {
+    const wantFc = month === thisMonth ? '&forecast=1' : '';
+    const r = await (await fetch(`/api/climate?lat=${place.lat}&lon=${place.lon}&month=${month}${wantFc}`)).json();
+    if (r.error) throw new Error(r.error);
+    clim = {...r.climate, forecast: r.forecast || [], place, month};
+  } catch (e) {
+    clim = null;
+    $('#climate').innerHTML = `<div class="clim"><div class="sub" style="color:var(--bad)">${e.message}</div></div>`;
+    return;
+  }
+  render();
+}
+
+function renderClimate(){
+  if (!clim) { $('#climate').innerHTML = ''; return; }
+  const c = clim;
+  const band = BANDS.find(b => c.tmean >= b.min);
+  const notes = [band.wear];
+
+  if (c.swing >= 11)
+    notes.push(`낮과 밤 기온차가 ${c.swing}도예요. 한 벌로 버티지 말고 벗고 입을 수 있게 겹쳐 입는 게 맞아요.`);
+  if (c.snow_days >= 5)
+    notes.push(`한 달에 눈 오는 날이 ${c.snow_days}일쯤 돼요. 신발은 예쁜 것보다 방수 되는 걸로 신으세요.`);
+  else if (c.rain_days >= 13)
+    notes.push(`비 오는 날이 ${c.rain_days}일이나 돼요. 거의 이틀에 한 번은 비라 방수 아우터가 있어야 해요.`);
+  else if (c.rain_days >= 8)
+    notes.push(`비 오는 날이 ${c.rain_days}일 정도예요. 접이식 우산은 챙기세요.`);
+  if (c.tmin <= -8)
+    notes.push('아침 최저가 영하 8도 아래로 떨어져요. 실내는 반대로 과하게 더운 경우가 많아서 반팔 이너가 오히려 유용해요.');
+  if (c.tmean >= 27 && c.rain_days >= 13)
+    notes.push('덥고 습한 데다 소나기까지 겹쳐요. 젖어도 금방 마르는 소재가 편해요.');
+
+  // 지금 고른 옷과 연결
+  const hasOuter = !!state.outer;
+  if (c.tmean < 12 && !hasOuter)
+    notes.push('⚠️ 아우터를 안 넣으셨는데, 이 기온에서는 아우터가 코디의 8할이에요.');
+  if (c.tmean < -5 && (state.top || state.bottom))
+    notes.push('어차피 대부분 패딩에 가려지니, 상하의는 색이 안 튀는 쪽으로만 맞춰도 충분해요.');
+  if (c.tmean >= 22 && hasOuter)
+    notes.push('이 기온이면 아우터는 거의 안 입게 돼요. 상하의만 놓고 봐도 괜찮은지 확인하세요.');
+
+  const fc = c.forecast.length ? `
+    <div class="fc">${c.forecast.map(d => `
+      <div>${Number(d.date.slice(5,7))}/${Number(d.date.slice(8,10))}
+        <b>${Math.round(d.max)}°</b>${Math.round(d.min)}°
+        ${d.rain != null && d.rain >= 40 ? '☂' : ''}
+      </div>`).join('')}</div>
+    <div class="sub" style="margin-top:4px">위는 이번 주 실제 예보예요.</div>` : '';
+
+  $('#climate').innerHTML = `
+    <div class="clim">
+      <div class="where">${c.place.name} <span class="sub">· ${c.place.where || ''} · ${c.month}월</span></div>
+      <div class="temps">
+        <div class="big">${c.tmean}°</div>
+        <div class="sub">낮 ${c.tmax}° / 밤 ${c.tmin}°<br>비 ${c.rain_days}일${c.snow_days ? ` · 눈 ${c.snow_days}일` : ''}</div>
+      </div>
+      <div class="sub">최근 3년 ${c.month}월 실제 관측 평균</div>
+      <div class="band">${band.label}</div>
+      <div class="advice">${notes.map(n => `<p>${n}</p>`).join('')}</div>
+      ${fc}
+    </div>`;
+}
+
+/* ---------------------------------------------------------------- 색 고르기 */
+let picking = null, showAll = false;
+
+function renderPicker(){
+  const el = $('#picker');
+  const it = picking && state[picking];
+  if (!it) { el.innerHTML = ''; return; }
+
+  const role = ROLES.find(r => r.key === picking).name;
+  const ref = encodeURIComponent(it.referer || '');
+  const every = it.all_candidates || [];
+  const list = showAll ? every.map(u => ({url:u})) : (it.candidates || []);
+
+  el.innerHTML = `
+    <div class="pickbar">
+      <b>${role}</b> ${showAll ? '페이지의 모든 이미지' : '다른 색상'}
+      <span class="sub">${list.length}개</span>
+      ${every.length > list.length || showAll
+        ? `<button class="ghost mini" id="pick-all" style="margin-left:6px">${
+            showAll ? '다른 색상만 보기' : `전체 ${every.length}장 보기`}</button>` : ''}
+      <button class="ghost mini" id="pick-close">닫기</button>
+    </div>
+    <div class="picker">${list.map(c => `
+      <div class="cand ${c.url === it.source ? 'on' : ''}" data-img="${encodeURIComponent(c.url)}">
+        <img loading="lazy" src="/api/thumb?u=${encodeURIComponent(c.url)}&r=${ref}">
+        ${c.hex ? `<i style="background:${c.hex}"></i>` : ''}
+      </div>`).join('')}</div>`;
+
+  $('#pick-close').onclick = () => { picking = null; showAll = false; renderPicker(); };
+  const all = $('#pick-all');
+  if (all) all.onclick = () => { showAll = !showAll; renderPicker(); };
+
+  el.querySelectorAll('.cand').forEach(box => {
+    // 못 불러오는 이미지는 조용히 뺀다
+    box.querySelector('img').onerror = () => box.remove();
+    box.onclick = () => swapImage(picking, decodeURIComponent(box.dataset.img));
+  });
+}
+
+async function swapImage(key, u){
+  const it = state[key], st = $('#st-'+key);
+  st.className = 'status'; st.textContent = '색 다시 읽는 중…';
+  try {
+    const r = await (await fetch(
+      `/api/image?u=${encodeURIComponent(u)}&r=${encodeURIComponent(it.referer || '')}`)).json();
+    if (r.error) throw new Error(r.error);
+    Object.assign(it, {image:r.image, colors:r.colors, source:r.source, pick:0});
+    delete it.manual;
+    st.textContent = '색을 바꿨어요.';
+    render();
+  } catch (e) {
+    st.className = 'status err'; st.textContent = e.message;
+  }
+}
+
+/* ---------------------------------------------------------------- 렌더 */
+function render(){
+  $('#board').innerHTML = ROLES.map(r => {
+    const it = state[r.key];
+    if (!it) return `<div class="item"><div class="ph">${r.name}<br>비어 있음</div></div>`;
+    const sw = it.colors.map((c,i) =>
+      `<i data-k="${r.key}" data-i="${i}" class="${i===(it.pick||0)?'on':''}" style="background:${c.hex}" title="${c.hex}"></i>`).join('');
+    const n = (it.candidates || []).length;
+    return `<div class="item">
+      <button class="x" data-del="${r.key}">×</button>
+      <img src="${it.image}" alt="${r.name}">
+      <div class="swatches">${sw}</div>
+      <div class="meta">
+        <div class="role">${r.name}</div>
+        <div class="name">${it.title || it.site}</div>
+      </div>
+      <div class="rep">대표색 ${colorName(hsl(repColor(r.key)))}${it.manual ? ' · 직접 지정' : ''}</div>
+      <div class="tools">
+        ${n > 1 ? `<button class="ghost mini" data-pick="${r.key}">다른 색 ${n}개</button>` : ''}
+        <input type="color" data-manual="${r.key}" value="${repColor(r.key)}" title="색 직접 지정">
+        ${it.manual ? `<button class="ghost mini" data-auto="${r.key}">자동</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    delete state[b.dataset.del];
+    $('#st-'+b.dataset.del).textContent = '';
+    if (picking === b.dataset.del) picking = null;
+    render();
+  });
+  document.querySelectorAll('.swatches i').forEach(s => s.onclick = () => {
+    const it = state[s.dataset.k];
+    it.pick = Number(s.dataset.i);
+    delete it.manual;
+    render();
+  });
+  document.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+    picking = (picking === b.dataset.pick) ? null : b.dataset.pick;
+    showAll = false;
+    renderPicker();
+  });
+  // oninput은 드래그 중 계속 터져서 화면이 다시 그려지므로 change에서만 반영
+  document.querySelectorAll('[data-manual]').forEach(i => i.onchange = () => {
+    state[i.dataset.manual].manual = i.value;
+    render();
+  });
+  document.querySelectorAll('[data-auto]').forEach(b => b.onclick = () => {
+    delete state[b.dataset.auto].manual;
+    render();
+  });
+  renderPicker();
+
+  const d = diagnose();
+  $('#result').innerHTML = !d
+    ? '<div class="empty">상의와 하의를 넣으면 진단이 나와요.</div>'
+    : `<div class="verdict">
+         <div class="score">${d.score}<small> / 100</small></div>
+         <div class="tag" style="color:${d.tag[1]}">${d.tag[0]}</div>
+       </div>
+       <div class="bar"><i style="width:${d.score}%"></i></div>
+       <ul class="notes">${d.notes.map(n =>
+         `<li><b>${n[0]}</b><span><span class="dot ${n[1]}"></span>${n[2]}</span></li>`).join('')}</ul>`;
+  renderClimate();
+}
+
+/* ---------------------------------------------------------------- 저장 */
+const KEY = 'coordi-looks';
+const readLooks = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+function renderLooks(){
+  const looks = readLooks();
+  $('#looks').innerHTML = looks.length
+    ? looks.map((l,i) => `<button data-look="${i}">${l.name}</button>`).join('')
+    : '<span class="status">저장한 코디가 없어요.</span>';
+  document.querySelectorAll('[data-look]').forEach(b => b.onclick = () => {
+    const l = readLooks()[b.dataset.look];
+    Object.keys(state).forEach(k => delete state[k]);
+    Object.assign(state, l.state);
+    ROLES.forEach(r => { $('#in-'+r.key).value = state[r.key]?.url || ''; });
+    render();
+  });
+}
+$('#save').onclick = () => {
+  if (!state.top || !state.bottom) return alert('상의와 하의를 먼저 넣어 주세요.');
+  const looks = readLooks();
+  looks.push({name: '코디 ' + (looks.length + 1), state: JSON.parse(JSON.stringify(state))});
+  try { localStorage.setItem(KEY, JSON.stringify(looks)); } catch {}
+  renderLooks();
+};
+$('#reset').onclick = () => {
+  Object.keys(state).forEach(k => delete state[k]);
+  ROLES.forEach(r => { $('#in-'+r.key).value = ''; $('#st-'+r.key).textContent = ''; });
+  render();
+};
+
+renderLooks();
+render();
+</script>
+</body>
+</html>
