@@ -34,20 +34,149 @@ FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 
 
 # ---------------------------------------------------------------- 지역 / 기후
-def search_places(q):
-    res = requests.get(GEO_API, params={"name": q, "count": 8, "language": "ko"}, timeout=12)
-    res.raise_for_status()
+# 한국 도시는 "경주시", "강릉시" 로 등록돼 있어서 "경주" 로는 안 잡히고 기차역만 나온다.
+KO_SUFFIXES = ["", "시", "군", "구", "특별자치시", "특별자치도"]
+# 지명으로 인정할 종류. AIRP(공항)·RSTN(역) 같은 건 제외한다.
+PLACE_CODES = ("PPL", "ADM", "ISL", "ISLS", "AREA", "RGN")
+# OSM 결과는 인구수가 없어서, 종류별로 대략의 가중치를 줘서 순위를 맞춘다
+OSM_WEIGHT = {"city": 3_000_000, "municipality": 1_000_000, "town": 300_000,
+              "county": 200_000, "state": 150_000, "province": 150_000, "region": 120_000,
+              "island": 80_000, "borough": 80_000, "archipelago": 60_000,
+              "suburb": 50_000, "village": 30_000, "hamlet": 10_000}
+NOMINATIM = "https://nominatim.openstreetmap.org/search"
+OSM_UA = {"User-Agent": "coordi-checker/1.0 (personal outfit planning tool)",
+          "Accept-Language": "ko"}
+
+
+# 한글 지명이 한국어 색인에 없고 로마자로만 있는 경우가 있다 (통영 → Tongyeong).
+CHO = ["g","kk","n","d","tt","r","m","b","pp","s","ss","","j","jj","ch","k","t","p","h"]
+JUNG = ["a","ae","ya","yae","eo","e","yeo","ye","o","wa","wae","oe","yo","u","wo","we",
+        "wi","yu","eu","ui","i"]
+JONG = ["","k","k","k","n","n","n","t","l","k","m","p","l","l","p","l","m","p","p","t",
+        "t","ng","t","t","k","t","p","t"]
+
+
+def romanize(text):
+    """국어의 로마자 표기법(간이). 음운 변화는 반영하지 않는다."""
     out = []
-    for r in res.json().get("results", []):
-        parts = [r.get("country"), r.get("admin1")]
-        out.append({
-            "name": r["name"],
-            "where": " · ".join([p for p in parts if p and p != r["name"]]),
-            "country": r.get("country") or "",
-            "lat": round(r["latitude"], 4),
-            "lon": round(r["longitude"], 4),
-        })
-    return out
+    for ch in text:
+        code = ord(ch) - 0xAC00
+        if 0 <= code < 11172:
+            out.append(CHO[code // 588] + JUNG[(code % 588) // 28] + JONG[code % 28])
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _om_places(name):
+    try:
+        res = requests.get(GEO_API, params={"name": name, "count": 10, "language": "ko"},
+                           headers=HEADERS, timeout=12)
+        res.raise_for_status()
+        return res.json().get("results", []) or []
+    except Exception:
+        return []
+
+
+def _osm_places(query):
+    try:
+        res = requests.get(NOMINATIM, params={
+            "q": query, "format": "jsonv2", "limit": 10,
+            "accept-language": "ko", "addressdetails": 1,
+        }, headers=OSM_UA, timeout=10)
+        res.raise_for_status()
+        return res.json() or []
+    except Exception:
+        return []
+
+
+def search_places(q):
+    q = (q or "").strip()
+    if not q:
+        return []
+
+    # "대한민국, 경주" / "캐나다 밴쿠버" 처럼 나라를 같이 적는 경우
+    parts = [p.strip() for p in re.split(r"[,/·]| {2,}", q) if p.strip()]
+    hint, target = (parts[0], parts[-1]) if len(parts) >= 2 else ("", q)
+
+    found, seen = [], {}
+
+    def add(item):
+        # 좌표가 겹치거나 같은 나라의 같은 이름이면 한 곳으로 본다
+        keys = [(round(item["lat"], 2), round(item["lon"], 2)),
+                (item["name"].lower(), item["country"])]
+        prev = next((seen[k] for k in keys if k in seen), None)
+        if prev:
+            prev["pop"] = max(prev["pop"], item["pop"])       # 더 센 쪽 점수를 따른다
+            if (item["name"].lower() == target.lower()
+                    and prev["name"].lower() != target.lower()):
+                prev["name"] = item["name"]                   # 적은 대로 맞는 이름을 쓴다
+            if not prev["where"]:
+                prev["where"] = item["where"]
+            for k in keys:
+                seen.setdefault(k, prev)
+            return
+        for k in keys:
+            seen[k] = item
+        found.append(item)
+
+    # 접미사를 붙인 질의를 한꺼번에 던진다 (순차로 하면 한 검색에 3초씩 걸린다)
+    hangul = bool(re.search(r"[가-힣]", target))
+    if hangul:
+        roman = romanize(target)
+        queries = [target + sfx for sfx in KO_SUFFIXES] + [roman, roman + "-si"]
+    else:
+        queries = [target]
+    # 두 곳을 한꺼번에 조회한다. Open-Meteo 는 접두어 매칭이라 놓치는 게 많고,
+    # OSM 은 자유 입력에 강한 대신 역·학교 같은 것도 섞여 나온다.
+    with ThreadPoolExecutor(max_workers=len(queries) + 1) as pool:
+        om_jobs = [pool.submit(_om_places, qq) for qq in queries]
+        osm_job = pool.submit(_osm_places, f"{hint}, {target}" if hint else target)
+
+        for job in om_jobs:                      # 한국어 이름이 나오는 쪽을 먼저 담는다
+            for r in job.result():
+                if not (r.get("feature_code") or "").startswith(PLACE_CODES):
+                    continue
+                where = " · ".join(x for x in (r.get("country"), r.get("admin1"))
+                                   if x and x != r["name"])
+                add({"name": r["name"], "where": where, "country": r.get("country") or "",
+                     "lat": round(r["latitude"], 4), "lon": round(r["longitude"], 4),
+                     "pop": r.get("population") or 0})
+
+        for r in osm_job.result():
+            kind = r.get("addresstype") or r.get("type")
+            if kind not in OSM_WEIGHT:
+                continue                         # 역·학교·식당 등은 버린다
+            addr = r.get("address") or {}
+            name = r.get("name") or (r.get("display_name") or "").split(",")[0]
+            region = addr.get("state") or addr.get("province") or addr.get("county") or ""
+            where = " · ".join(x for x in (addr.get("country"), region) if x and x != name)
+            add({"name": name, "where": where, "country": addr.get("country") or "",
+                 "lat": round(float(r["lat"]), 4), "lon": round(float(r["lon"]), 4),
+                 "pop": OSM_WEIGHT[kind]})
+
+    def score(item):
+        s = item["pop"]
+        if hint and hint in (item["country"] + " " + item["where"]):
+            s += 5_000_000                       # 사용자가 적은 나라를 위로
+        lowered = item["name"].lower()
+        if lowered == target.lower() or item["name"].startswith(target):
+            s += 100_000                         # 적은 이름과 그대로 맞는 것
+        if hangul and lowered == romanize(target).lower():
+            s += 100_000                         # 로마자로 찾은 같은 이름
+        return -s
+
+    found.sort(key=score)
+    # 로마자로 찾았으면 사용자가 적은 한글로 보여준다 (Tongyeong → 통영)
+    if hangul:
+        roman_low = romanize(target).lower()
+        for item in found:
+            if item["name"].lower() == roman_low:
+                item["name"] = target
+    for item in found:
+        item.pop("pop", None)
+        item.pop("src", None)
+    return found[:8]
 
 
 def climate(lat, lon, month):
