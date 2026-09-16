@@ -19,6 +19,9 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(ROOT, "cache")
 PORT = int(os.environ.get("PORT", 8787))
 
+# 새로 내려받은 폴더에는 cache/ 가 없다 (git 추적 제외). 없으면 만든다.
+os.makedirs(CACHE, exist_ok=True)
+
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
 HEADERS = {
