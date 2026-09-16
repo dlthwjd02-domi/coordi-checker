@@ -587,6 +587,22 @@ async function getLocalPhoto(file){
   };
 }
 
+// 사이트가 정책으로 자동 수집을 막는 곳들. 왜 안 되는지 정확히 알려준다.
+const POLICY_BLOCKED = [
+  [/(^|\.)musinsa\.com$/i, '무신사는 허용한 검색봇 외에는 자동 수집을 막아 둬서(robots.txt) 주소로는 못 가져와요.'],
+  [/(^|\.)naver\.com$/i, '네이버 스마트스토어는 자동 수집을 막고 있어서 주소로는 못 가져와요.'],
+  [/(^|\.)coupang\.com$/i, '쿠팡은 자동 수집을 막고 있어서 주소로는 못 가져와요.'],
+  [/(^|\.)a-bly\.com$/i, '에이블리는 앱에서 화면을 그려서 주소로는 못 가져와요.'],
+  [/(^|\.)zigzag\.kr$/i, '지그재그는 앱에서 화면을 그려서 주소로는 못 가져와요.'],
+];
+
+function policyNote(url){
+  let host;
+  try { host = new URL(url).hostname; } catch { return null; }
+  const hit = POLICY_BLOCKED.find(([re]) => re.test(host));
+  return hit ? hit[1] + ' 옆의 “사진” 버튼으로 상품 사진을 올려 주세요.' : null;
+}
+
 async function getProduct(raw){
   let url = (raw || '').trim();
   if (!url) throw new Error('주소 형식이 이상해요. https:// 로 시작하는 상품 주소를 넣어 주세요.');
@@ -607,7 +623,15 @@ async function getProduct(raw){
     };
   }
 
-  const { html, finalUrl } = await relayPage(url);
+  let page;
+  try {
+    page = await relayPage(url);
+  } catch (err) {
+    // 막힌 사이트면 원인을 사이트 이름과 함께 알려준다
+    const note = policyNote(url);
+    throw note ? new Error(note) : err;
+  }
+  const { html, finalUrl } = page;
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const metas = parseMetas(doc);
   let main = pickImage(metas, html, finalUrl);
