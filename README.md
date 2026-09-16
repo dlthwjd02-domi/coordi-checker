@@ -11,20 +11,11 @@
 
 브라우저는 다른 사이트의 HTML·이미지를 직접 읽을 수 없다 (CORS, 핫링크 차단).
 그래서 **가져오기만** Cloudflare Worker 가 대신하고, **색 추출·패턴 판별·배경 제거는
-브라우저가 Canvas 로 직접** 한다. 정적 사이트라 잠들지 않고 바로 열린다.
+브라우저가 Canvas 로 직접** 한다. 기온·지역 검색은 Open-Meteo / OpenStreetMap 을
+브라우저에서 바로 부른다 (둘 다 CORS 를 열어둔다). 정적 사이트라 잠들지 않고 바로 열린다.
 
-```
-GitHub Pages (정적)          Cloudflare Worker          쇼핑몰
- docs/index.html  ──fetch──▶  /page?u=…  ──────────▶  상품 페이지 HTML
- docs/core.js     ──<img>──▶  /img?u=&r=  ─────────▶  상품 이미지
-   └ Canvas 로 색·패턴·배경 제거
-
- 기온·지역 검색은 Open-Meteo / OpenStreetMap 을 브라우저에서 직접 호출
- (둘 다 Access-Control-Allow-Origin: * 을 준다)
-```
-
-Worker 는 `worker/` 에 있고 `npx wrangler deploy` 로 올린다.
-호출 출처를 제한하고 사설망 주소를 막아 열린 중계로 쓰이지 않게 했다.
+구조와 옮긴 과정, 파이썬과의 대조 결과는 [WEB.md](WEB.md) 에 있다.
+Worker 는 `worker/` 에 있고 `cd worker && npx wrangler deploy` 로 올린다.
 
 ## 내 맥에서 돌리기 (선택)
 
@@ -47,8 +38,7 @@ pkill -f server.py                # 종료
 
 **같은 로직이 두 곳에 있다** — `server.py`(파이썬)와 `docs/core.js`(브라우저).
 웹 쪽이 주된 구현이고, 파이썬 쪽은 로컬 실행용으로 남겼다. 한쪽을 고치면 다른 쪽도 봐야 한다.
-양자화 방식이 달라서(Pillow MEDIANCUT vs 중앙값 분할 + k-means) 대표색이 몇 단계씩 다를 수 있다.
-같은 상품 8종으로 대조한 결과는 [AUDIT.md](AUDIT.md) 에 있다.
+양자화 방식이 달라서 대표색이 몇 단계씩 다를 수 있다 — 대조 결과는 [WEB.md](WEB.md) 에 있다.
 
 ## 파일
 
@@ -64,6 +54,7 @@ pkill -f server.py                # 종료
 | `docs/local.html` | 내 맥에서 돌리는 방법 안내 |
 | `worker/` | Cloudflare Worker (상품 페이지·이미지 가져오기 중계) |
 | `AUDIT.md` | 전체 점검 기록 |
+| `WEB.md` | 웹 버전 구조와 옮긴 기록 |
 
 ## 쓰는 흐름
 
