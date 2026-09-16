@@ -104,7 +104,14 @@
 
   .stage{position:relative;width:300px;height:520px;margin:0 auto;border-radius:12px;
     overflow:hidden;background:linear-gradient(#efece7,#e5e1db);border:1px solid var(--line)}
-  .win{position:absolute;left:0;right:0;overflow:hidden}
+  .win{position:absolute;left:0;right:0;overflow:hidden;touch-action:none;cursor:grab}
+  .win:active{cursor:grabbing}
+  .win img{-webkit-user-drag:none;user-select:none;pointer-events:none}
+  .stage{user-select:none;-webkit-user-select:none}
+  .fithint{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    margin-top:14px;font-size:12px;color:var(--muted)}
+  .fithint button{margin-left:auto}
+  .fithint button + button{margin-left:0}
   .win img{position:absolute;left:50%;top:0;width:100%;
     transform:translateX(calc(-50% + var(--x))) translateY(var(--y)) scale(var(--s));
     transform-origin:top center}
@@ -855,7 +862,80 @@ function icon(name, cls){
 /* ---------------------------------------------------------------- 핏 뷰 */
 let fitMode = 'side';
 // scale 이 먼저 먹어서 -52% 로는 모델 상체가 보였다. 다리가 보이는 값으로 맞췄다.
-const fitCtl = {top:{s:1.6, y:-14, x:0}, bottom:{s:1.6, y:-88, x:0}};
+const FIT_START = {top:{s:1.6, y:-14, x:0}, bottom:{s:1.6, y:-88, x:0}};
+const fitCtl = {top:{...FIT_START.top}, bottom:{...FIT_START.bottom}};
+
+function applyFit(key){
+  const win = document.querySelector(`#fit .win[data-slot="${key}"]`);
+  if (!win) return;
+  const c = fitCtl[key];
+  win.style.setProperty('--s', c.s);
+  win.style.setProperty('--y', c.y + '%');
+  win.style.setProperty('--x', c.x + '%');
+  document.querySelectorAll(`#fitctl [data-fit^="${key}:"]`).forEach(inp => {
+    inp.value = fitCtl[key][inp.dataset.fit.split(':')[1]];
+  });
+}
+
+/* 손가락·마우스로 직접 옮기고 벌린다.
+   translate 가 scale 뒤에 곱해지므로 이동량은 확대율과 무관하고,
+   퍼센트는 이미지의 배율 적용 전 크기 기준이라 그 크기로 나누면 1:1 로 따라온다. */
+function bindDrag(win, key){
+  const pts = new Map();
+  let start = null;
+
+  const spread = () => {
+    const [a, b] = [...pts.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  const center = () => {
+    const v = [...pts.values()];
+    return { x: v.reduce((s, p) => s + p.x, 0) / v.length,
+             y: v.reduce((s, p) => s + p.y, 0) / v.length };
+  };
+  const grab = () => {
+    const img = win.querySelector('img');
+    start = { ...fitCtl[key], at: center(),
+              gap: pts.size >= 2 ? spread() : 0,
+              w: img.offsetWidth || win.clientWidth,
+              h: img.offsetHeight || win.clientHeight };
+  };
+
+  win.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { win.setPointerCapture(e.pointerId); } catch (err) { /* 합성 이벤트 */ }
+    grab();
+  });
+
+  win.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId) || !start) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const c = fitCtl[key], now = center();
+    if (pts.size >= 2 && start.gap > 0) {
+      c.s = Math.min(3, Math.max(0.25, start.s * (spread() / start.gap)));
+    }
+    c.x = Math.min(120, Math.max(-120, start.x + (now.x - start.at.x) / start.w * 100));
+    c.y = Math.min(60, Math.max(-340, start.y + (now.y - start.at.y) / start.h * 100));
+    applyFit(key);
+    e.preventDefault();
+  });
+
+  const release = e => {
+    pts.delete(e.pointerId);
+    if (pts.size) grab(); else start = null;
+  };
+  win.addEventListener('pointerup', release);
+  win.addEventListener('pointercancel', release);
+
+  // 트랙패드 핀치는 ctrl+휠로 온다. 일반 스크롤은 페이지에 넘긴다.
+  win.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const c = fitCtl[key];
+    c.s = Math.min(3, Math.max(0.25, c.s * (1 - e.deltaY / 180)));
+    applyFit(key);
+  }, { passive: false });
+}
 
 document.querySelectorAll('#fitmode button').forEach(b => b.onclick = () => {
   fitMode = b.dataset.mode;
@@ -926,11 +1006,16 @@ function renderFit(){
         if (!it) return `<div class="win empty" style="${box}">${name} 없음</div>`;
         const c = fitCtl[k];
         return `<div class="win" data-slot="${k}" style="${box};--s:${c.s};--y:${c.y}%;--x:${c.x}%">
-          <img src="${it.cut || it.image}" alt="${name}">
+          <img src="${it.cut || it.image}" alt="${name}" draggable="false">
         </div>`;
       }).join('')}
     </div>
-    <div class="fitctl">
+    <div class="fithint">
+      <span>사진을 <b>끌어서</b> 옮기고, <b>두 손가락으로 벌리면</b> 커져요</span>
+      <button class="ghost mini" id="fit-reset">처음으로</button>
+      <button class="ghost mini" id="fit-slider">슬라이더</button>
+    </div>
+    <div class="fitctl" id="fitctl" hidden>
       ${slots.filter(([k]) => state[k]).map(([k,name]) => {
         const c = fitCtl[k];
         return `<b>${name} 크기</b>
@@ -950,11 +1035,21 @@ function renderFit(){
     const [k, prop] = inp.dataset.fit.split(':');
     inp.oninput = () => {
       fitCtl[k][prop] = Number(inp.value);
-      const win = el.querySelector(`.win[data-slot="${k}"]`);
-      if (win) win.style.setProperty('--' + prop,
-        prop === 's' ? inp.value : inp.value + '%');
+      applyFit(k);
     };
   });
+
+  el.querySelectorAll('.win[data-slot]').forEach(win => bindDrag(win, win.dataset.slot));
+
+  $('#fit-slider').onclick = () => {
+    const box = $('#fitctl');
+    box.hidden = !box.hidden;
+  };
+  $('#fit-reset').onclick = () => {
+    Object.assign(fitCtl.top, FIT_START.top);
+    Object.assign(fitCtl.bottom, FIT_START.bottom);
+    renderFit();
+  };
 
   ensureCutouts().then(changed => { if (changed) renderFit(); });
 }

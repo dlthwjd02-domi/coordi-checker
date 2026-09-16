@@ -55,7 +55,7 @@ pkill -f server.py                # 종료
 | 경로 | 역할 |
 |---|---|
 | `server.py` | 상품 페이지 스크래핑, 색 추출, 기후 조회, 정적 파일 서빙 |
-| `static/index.html` | 화면 전부 (CSS·JS 인라인). 코디 보드, 진단, 여행지 카드 |
+| `static/index.html` | 옛 로컬 전용 화면. 이제 로컬 서버도 `docs/` 를 서비스하므로 쓰이지 않는다 |
 | `start.command` | 더블클릭 런처 |
 | `cache/` | 내려받은 이미지와 기후 조회 결과 (git 추적 안 함) |
 | `requirements.txt` | `requests`, `Pillow` |

@@ -275,17 +275,20 @@ function cutout(img, tol = 26, limit = 560){
     if (y < h - 1) stack.push(x, y + 1);
   }
 
-  let minX = w, minY = h, maxX = -1, maxY = -1;
+  let minX = w, minY = h, maxX = -1, maxY = -1, kept = 0;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = y * w + x;
-    if (mask[i]) { d[i * 4 + 3] = 0; continue; }
+    if (mask[y * w + x]) continue;
+    kept++;
     if (x < minX) minX = x;
     if (x > maxX) maxX = x;
     if (y < minY) minY = y;
     if (y > maxY) maxY = y;
   }
+  // 사진 전체가 한 색이면 통째로 지워진다. 그건 배경을 지운 게 아니다.
+  if (maxX < 0 || kept / (w * h) < 0.05) return { canvas: cv, removed: false };
+
+  for (let i = 0; i < mask.length; i++) if (mask[i]) d[i * 4 + 3] = 0;
   ctx.putImageData(id, 0, 0);
-  if (maxX < 0) return { canvas: cv, removed: true };
 
   const out = document.createElement('canvas');
   out.width = maxX - minX + 1; out.height = maxY - minY + 1;
